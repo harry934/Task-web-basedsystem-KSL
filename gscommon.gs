@@ -601,3 +601,226 @@ function formatDateInTimezone_(dateValue, format) {
   var finalFormat = format || "yyyy-MM-dd'T'HH:mm:ss";
   return Utilities.formatDate(dateValue, APP_TIMEZONE, finalFormat);
 }
+
+function getDueSoonDays_() {
+  return Math.max(1, normalizeNumber_(getSettingValue_('DUE_SOON_DAYS', 3), 3));
+}
+
+function assignmentAcceptanceRequired_() {
+  var value = getSettingValue_('REQUIRE_ASSIGNMENT_ACCEPTANCE', true);
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return normalizeBoolean_(value);
+}
+
+function findTaskRecord_(taskId) {
+  var id = normalizeString_(taskId);
+  if (!id) {
+    return null;
+  }
+  var tasks = readSheetRecords_('TASKS');
+  for (var i = 0; i < tasks.length; i += 1) {
+    if (normalizeString_(tasks[i]['Task ID']) === id) {
+      return tasks[i];
+    }
+  }
+  return null;
+}
+
+function findUserByEmployeeId_(employeeId) {
+  var id = normalizeString_(employeeId);
+  if (!id) {
+    return null;
+  }
+  var users = EXECUTION_USERS_CACHE_ || readSheetRecords_('USERS');
+  for (var i = 0; i < users.length; i += 1) {
+    if (normalizeString_(users[i]['Employee ID']) === id) {
+      return users[i];
+    }
+  }
+  return null;
+}
+
+function writeTaskHistory_(actor, taskId, actionType, changedField, oldValue, newValue, remarks) {
+  var schema = resolveSchema_('TASK_HISTORY');
+  var sheet = getSheetBySchema_(schema);
+  var record = {
+    'History ID': generateSequenceId_('HIS'),
+    'Task ID': normalizeString_(taskId),
+    'Action Type': normalizeString_(actionType),
+    'Previous Value': serializeForAudit_(oldValue),
+    'New Value': serializeForAudit_(newValue),
+    'Changed Field': normalizeString_(changedField),
+    'Changed By': actor && actor.userId ? actor.userId : '',
+    'Changed By Name': actor && actor.fullName ? actor.fullName : '',
+    'Change Date': new Date(),
+    'IP/Session Reference': '',
+    Remarks: normalizeString_(remarks)
+  };
+  appendSheetRecord_(sheet, schema.columns, record);
+}
+
+function createNotification_(userId, employeeId, type, title, message, relatedTaskId, priority) {
+  if (!normalizeString_(userId) && !normalizeString_(employeeId)) {
+    return;
+  }
+  var schema = resolveSchema_('NOTIFICATIONS');
+  var sheet = getSheetBySchema_(schema);
+  var record = {
+    'Notification ID': generateSequenceId_('NTF'),
+    'User ID': normalizeString_(userId),
+    'Employee ID': normalizeString_(employeeId),
+    'Notification Type': normalizeString_(type || 'Assignment'),
+    Title: normalizeString_(title),
+    Message: normalizeString_(message),
+    'Related Task ID': normalizeString_(relatedTaskId),
+    Priority: normalizeString_(priority || 'Medium'),
+    'Read Status': 'Unread',
+    'Created Date': new Date(),
+    'Read Date': '',
+    'Expiry Date': ''
+  };
+  appendSheetRecord_(sheet, schema.columns, record);
+}
+
+function upsertEmployeeFromUser_(userRecord) {
+  var employeeId = normalizeString_(userRecord && userRecord['Employee ID']);
+  if (!employeeId) {
+    return;
+  }
+  var schema = resolveSchema_('EMPLOYEES');
+  var sheet = getSheetBySchema_(schema);
+  var employees = [];
+  try {
+    employees = readSheetRecords_(schema);
+  } catch (error) {
+    return;
+  }
+  var existing = employees.find(function (record) {
+    return normalizeString_(record['Employee ID']) === employeeId;
+  });
+  var now = new Date();
+  var fullName = normalizeString_(userRecord['Full Name']);
+  var payload = existing ? Object.assign({}, existing) : {
+    'Employee ID': employeeId,
+    'Employee Number': employeeId,
+    'Active Tasks': 0,
+    'Completed Tasks': 0,
+    'Overdue Tasks': 0,
+    'Completion Rate': 0,
+    'Performance Score': '',
+    'Created Date': now
+  };
+  payload['Full Name'] = fullName;
+  payload['First Name'] = normalizeString_(userRecord['Given Name']);
+  payload['Last Name'] = normalizeString_(userRecord['Family Name']);
+  payload.Email = normalizeEmail_(userRecord['Google Email']);
+  payload.Department = normalizeString_(userRecord.Department);
+  payload['Job Title'] = normalizeString_(userRecord['Job Title']);
+  payload['Supervisor ID'] = normalizeString_(userRecord['Supervisor ID']);
+  payload['Employment Status'] = isActiveAccountStatus_(userRecord['Account Status'])
+    ? 'Active'
+    : 'Inactive';
+  payload['Profile Photo'] = normalizeString_(userRecord['Profile Photo']);
+  payload['Updated Date'] = now;
+
+  if (existing) {
+    updateSheetRecordByRow_(sheet, existing.__rowNumber, schema.columns, payload);
+  } else {
+    appendSheetRecord_(sheet, schema.columns, payload);
+  }
+}
+
+function getAssignablePeople_() {
+  var people = [];
+  var seen = {};
+
+  function addPerson(person) {
+    var id = normalizeString_(person.employeeId);
+    if (!id || seen[id]) {
+      return;
+    }
+    seen[id] = true;
+    people.push(person);
+  }
+
+  var users = [];
+  try {
+    users = readSheetRecords_('USERS');
+  } catch (error) {
+    users = [];
+  }
+  users.forEach(function (record) {
+    if (!isActiveAccountStatus_(record['Account Status'])) {
+      return;
+    }
+    if (!normalizeString_(record['Employee ID'])) {
+      return;
+    }
+    addPerson({
+      employeeId: normalizeString_(record['Employee ID']),
+      fullName: normalizeString_(record['Full Name']),
+      department: normalizeString_(record.Department),
+      jobTitle: normalizeString_(record['Job Title']),
+      userId: normalizeString_(record['User ID']),
+      email: normalizeEmail_(record['Google Email'])
+    });
+  });
+
+  var employees = [];
+  try {
+    employees = readSheetRecords_('EMPLOYEES');
+  } catch (error) {
+    employees = [];
+  }
+  employees.forEach(function (record) {
+    if (normalizeString_(record['Employment Status']).toLowerCase() === 'inactive') {
+      return;
+    }
+    addPerson({
+      employeeId: normalizeString_(record['Employee ID']),
+      fullName: normalizeString_(record['Full Name']),
+      department: normalizeString_(record.Department),
+      jobTitle: normalizeString_(record['Job Title']),
+      userId: '',
+      email: normalizeEmail_(record.Email)
+    });
+  });
+
+  return people;
+}
+
+function refreshTaskAssigneeSummary_(taskId) {
+  var task = findTaskRecord_(taskId);
+  if (!task) {
+    return;
+  }
+  var assignments = [];
+  try {
+    assignments = readSheetRecords_('TASK_ASSIGNMENTS');
+  } catch (error) {
+    assignments = [];
+  }
+  var active = assignments.filter(function (record) {
+    if (normalizeString_(record['Task ID']) !== normalizeString_(taskId)) {
+      return false;
+    }
+    var status = normalizeString_(record['Assignment Status']).toLowerCase();
+    return status !== 'rejected' && status !== 'reassigned' && status !== 'cancelled';
+  });
+  var schema = resolveSchema_('TASKS');
+  var sheet = getSheetBySchema_(schema);
+  var updated = Object.assign({}, task);
+  updated['Number of Assignees'] = active.length;
+  if (active.length && !normalizeString_(updated['Primary Assignee'])) {
+    updated['Primary Assignee'] = normalizeString_(active[0]['Employee ID']);
+    updated['Primary Assignee Name'] = normalizeString_(active[0]['Employee Name']);
+  }
+  if (active.length && normalizeString_(updated.Status).toLowerCase() === 'draft') {
+    updated.Status = 'Assigned';
+  }
+  updated['Updated Timestamp'] = new Date();
+  applyTaskDerivedFields_(updated);
+  updateSheetRecordByRow_(sheet, task.__rowNumber, schema.columns, updated);
+}

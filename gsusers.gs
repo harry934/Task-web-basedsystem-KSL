@@ -127,6 +127,7 @@ function approveUser(sessionToken, payload) {
     }
 
     updateSheetRecordByRow_(usersSheet, targetUser.__rowNumber, schema.columns, updated);
+    upsertEmployeeFromUser_(updated);
 
     writeAuditLog_(
       authContext.user,

@@ -44,10 +44,13 @@ var PAGE_TITLES = {
 
 var NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-line', roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'] },
+  { id: 'mytasks', label: 'My Tasks', icon: 'fa-user-check', roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'] },
   { id: 'tasks', label: 'Tasks', icon: 'fa-list-check', roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'] },
+  { id: 'assignments', label: 'Assignments', icon: 'fa-people-arrows', roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'] },
+  { id: 'progress', label: 'Progress', icon: 'fa-bars-progress', roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'] },
+  { id: 'monitoring', label: 'Monitoring', icon: 'fa-binoculars', roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'] },
   { id: 'departments', label: 'Departments', icon: 'fa-building', roles: ['Administrator', 'Manager'] },
-  { id: 'users', label: 'Users', icon: 'fa-user-shield', roles: ['Administrator'] },
-  { id: 'settings', label: 'Settings', icon: 'fa-gear', roles: ['Administrator'] }
+  { id: 'users', label: 'Users', icon: 'fa-user-shield', roles: ['Administrator'] }
 ];
 
 function doGet(e) {

@@ -152,6 +152,128 @@ var KSL_SLICE1_SCHEMAS = {
       'New Value',
       'Timestamp'
     ]
+  },
+  EMPLOYEES: {
+    key: 'EMPLOYEES',
+    sheetName: 'Employees',
+    rangeName: 'RANGEEMPLOYEES',
+    columns: [
+      'Employee ID',
+      'Employee Number',
+      'Full Name',
+      'First Name',
+      'Last Name',
+      'Email',
+      'Phone',
+      'Department',
+      'Section',
+      'Job Title',
+      'Employment Type',
+      'Supervisor ID',
+      'Supervisor Name',
+      'Team',
+      'Employment Status',
+      'Date Joined',
+      'Work Location',
+      'Profile Photo',
+      'Active Tasks',
+      'Completed Tasks',
+      'Overdue Tasks',
+      'Completion Rate',
+      'Performance Score',
+      'Created Date',
+      'Updated Date'
+    ]
+  },
+  TASK_ASSIGNMENTS: {
+    key: 'TASK_ASSIGNMENTS',
+    sheetName: 'TaskAssignments',
+    rangeName: 'RANGETASKASSIGNMENTS',
+    columns: [
+      'Assignment ID',
+      'Task ID',
+      'Employee ID',
+      'Employee Name',
+      'Department',
+      'Team',
+      'Assigned By',
+      'Assignment Date',
+      'Start Date',
+      'Due Date',
+      'Assignment Status',
+      'Employee Acceptance',
+      'Acceptance Date',
+      'Employee Progress %',
+      'Employee Status',
+      'Last Progress Update',
+      'Completion Date',
+      'Employee Remarks',
+      'Created Date',
+      'Updated Date'
+    ]
+  },
+  TASK_UPDATES: {
+    key: 'TASK_UPDATES',
+    sheetName: 'TaskUpdates',
+    rangeName: 'RANGETASKUPDATES',
+    columns: [
+      'Update ID',
+      'Task ID',
+      'Employee ID',
+      'Employee Name',
+      'Update Date',
+      'Progress %',
+      'Previous Progress %',
+      'Status',
+      'Work Completed',
+      'Work Remaining',
+      'Challenges',
+      'Blockers',
+      'Next Action',
+      'Hours Worked',
+      'Employee Remarks',
+      'Supervisor Review',
+      'Supervisor Comment',
+      'Supervisor Review Date',
+      'Created Timestamp'
+    ]
+  },
+  TASK_HISTORY: {
+    key: 'TASK_HISTORY',
+    sheetName: 'TaskHistory',
+    rangeName: 'RANGETASKHISTORY',
+    columns: [
+      'History ID',
+      'Task ID',
+      'Action Type',
+      'Previous Value',
+      'New Value',
+      'Changed Field',
+      'Changed By',
+      'Changed By Name',
+      'Change Date',
+      'IP/Session Reference',
+      'Remarks'
+    ]
+  },
+  NOTIFICATIONS: {
+    key: 'NOTIFICATIONS',
+    sheetName: 'Notifications',
+    rangeName: 'RANGENOTIFICATIONS',
+    columns: [
+      'Notification ID',
+      'User ID',
+      'Employee ID',
+      'Notification Type',
+      'Title',
+      'Message',
+      'Related Task ID',
+      'Priority',
+      'Read Status',
+      'Created Date',
+      'Read Date',
+      'Expiry Date'
+    ]
   }
 };
 

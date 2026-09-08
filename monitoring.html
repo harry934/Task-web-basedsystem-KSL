@@ -1,0 +1,132 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Task Monitoring</h1>
+    <p>Overdue, due soon, blocked, and in-progress work across your scope.</p>
+  </div>
+
+  <div id="monitoringSummary" class="kpi-grid"></div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="btn btn-outline monitor-view" type="button" data-view="all">All</button>
+        <button class="btn btn-outline monitor-view" type="button" data-view="overdue">Overdue</button>
+        <button class="btn btn-outline monitor-view" type="button" data-view="duesoon">Due soon</button>
+        <button class="btn btn-outline monitor-view" type="button" data-view="blocked">Blocked</button>
+        <button class="btn btn-outline monitor-view" type="button" data-view="inprogress">In progress</button>
+      </div>
+      <div class="toolbar-right">
+        <input id="monitoringSearchInput" class="input" type="search" placeholder="Search..." style="min-width: 220px;">
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Task ID</th>
+          <th>Title</th>
+          <th>Department</th>
+          <th>Assignee</th>
+          <th>Status</th>
+          <th>Flag</th>
+          <th>Due</th>
+          <th>Progress</th>
+        </tr>
+      </thead>
+      <tbody id="monitoringTableBody">
+        <tr><td colspan="8" class="empty-state">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var state = { view: 'all' };
+
+    function loadMonitoring() {
+      KSL.call('listMonitoredTasks', KSL.getSessionToken(), {
+        view: state.view,
+        query: document.getElementById('monitoringSearchInput').value.trim(),
+        page: 1,
+        pageSize: 50
+      })
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Failed to load monitoring.');
+          }
+          var payload = response.data || {};
+          var summary = payload.summary || {};
+          document.getElementById('monitoringSummary').innerHTML = [
+            { key: 'overdue', label: 'Overdue' },
+            { key: 'duesoon', label: 'Due soon' },
+            { key: 'blocked', label: 'Blocked' },
+            { key: 'inprogress', label: 'In progress' }
+          ]
+            .map(function (item) {
+              return (
+                '<div class="card kpi-card"><h3>' +
+                item.label +
+                '</h3><strong>' +
+                Number(summary[item.key] || 0) +
+                '</strong></div>'
+              );
+            })
+            .join('');
+
+          var items = payload.items || [];
+          var body = document.getElementById('monitoringTableBody');
+          if (!items.length) {
+            body.innerHTML = '<tr><td colspan="8" class="empty-state">No matching tasks.</td></tr>';
+            return;
+          }
+          body.innerHTML = items
+            .map(function (item) {
+              return (
+                '<tr><td>' +
+                KSL.escapeHtml(item.taskId) +
+                '</td><td>' +
+                KSL.escapeHtml(item.taskTitle) +
+                '</td><td>' +
+                KSL.escapeHtml(item.department || '-') +
+                '</td><td>' +
+                KSL.escapeHtml(item.primaryAssigneeName || '-') +
+                '</td><td>' +
+                KSL.escapeHtml(item.status) +
+                '</td><td><span class="status-badge ' +
+                KSL.statusClass(item.monitorFlag) +
+                '">' +
+                KSL.escapeHtml(item.monitorFlag) +
+                '</span></td><td>' +
+                KSL.escapeHtml(KSL.formatDate(item.dueDate) || '-') +
+                '</td><td>' +
+                KSL.escapeHtml(String(item.progress || 0) + '%') +
+                '</td></tr>'
+              );
+            })
+            .join('');
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Failed to load monitoring.', 'error');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader'], function () {
+        document.querySelectorAll('.monitor-view').forEach(function (button) {
+          button.addEventListener('click', function () {
+            state.view = button.dataset.view || 'all';
+            loadMonitoring();
+          });
+        });
+        document.getElementById('monitoringSearchInput').addEventListener(
+          'input',
+          KSL.debounce(loadMonitoring, 400)
+        );
+        loadMonitoring();
+      });
+    });
+  })();
+</script>
