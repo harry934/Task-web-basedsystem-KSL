@@ -1,0 +1,78 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Operations dashboard</h1>
+    <p>Overview of current task status for Kenya Shipyards Limited.</p>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="refreshDashboardButton" class="btn btn-primary" type="button">
+          <i class="fa-solid fa-rotate-right"></i>
+          Refresh
+        </button>
+      </div>
+      <div class="toolbar-right">
+        <span class="page-note">Role-scoped metrics for current account.</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboardKpiGrid" class="kpi-grid"></div>
+</section>
+
+<script>
+  (function () {
+    var KPI_CONFIG = [
+      { key: 'totalTasks', label: 'Total Tasks' },
+      { key: 'assignedTasks', label: 'Assigned' },
+      { key: 'inProgressTasks', label: 'In Progress' },
+      { key: 'completedTasks', label: 'Completed' },
+      { key: 'overdueTasks', label: 'Overdue' },
+      { key: 'archivedTasks', label: 'Archived' }
+    ];
+
+    function renderKpis(summary) {
+      var container = document.getElementById('dashboardKpiGrid');
+      if (!container) {
+        return;
+      }
+      container.innerHTML = KPI_CONFIG.map(function (item) {
+        var value = Number(summary[item.key] || 0);
+        return (
+          '<div class="card kpi-card">' +
+          '<h3>' +
+          KSL.escapeHtml(item.label) +
+          '</h3>' +
+          '<strong>' +
+          value +
+          '</strong>' +
+          '</div>'
+        );
+      }).join('');
+    }
+
+    function loadDashboard() {
+      KSL.call('getDashboardSummary', KSL.getSessionToken())
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Failed to load dashboard.');
+          }
+          renderKpis(response.data || {});
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Failed to load dashboard.', 'error');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
+        loadDashboard();
+        var refreshButton = document.getElementById('refreshDashboardButton');
+        if (refreshButton) {
+          refreshButton.addEventListener('click', loadDashboard);
+        }
+      });
+    });
+  })();
+</script>

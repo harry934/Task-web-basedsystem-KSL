@@ -1,0 +1,294 @@
+<script>
+  (function () {
+    var SESSION_KEY = 'kslSessionToken';
+    var KSL = (window.KSL = window.KSL || {});
+    KSL.state = KSL.state || {
+      sessionToken: sessionStorage.getItem(SESSION_KEY) || '',
+      bootstrap: null
+    };
+
+    KSL.getActivePage = function () {
+      return document.body.dataset.activePage || 'dashboard';
+    };
+
+    KSL.getScriptUrl = function () {
+      return (window.APP_TEMPLATE_STATE && window.APP_TEMPLATE_STATE.scriptUrl) || '';
+    };
+
+    KSL.getGoogleClientId = function () {
+      return document.body.dataset.googleClientId || '';
+    };
+
+    KSL.getSessionToken = function () {
+      return KSL.state.sessionToken || '';
+    };
+
+    KSL.setSessionToken = function (token) {
+      KSL.state.sessionToken = token || '';
+      if (token) {
+        sessionStorage.setItem(SESSION_KEY, token);
+      } else {
+        sessionStorage.removeItem(SESSION_KEY);
+      }
+    };
+
+    KSL.clearSessionToken = function () {
+      KSL.setSessionToken('');
+    };
+
+    KSL.debounce = function (fn, waitMs) {
+      var timer = null;
+      return function () {
+        var args = arguments;
+        var context = this;
+        window.clearTimeout(timer);
+        timer = window.setTimeout(function () {
+          fn.apply(context, args);
+        }, waitMs || 400);
+      };
+    };
+
+    KSL.runServer = function (functionName) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function (resolve, reject) {
+        var runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(function (error) {
+            var message = error && error.message ? error.message : String(error || 'Request failed.');
+            if (/timed out|Exceeded maximum execution time|Service timed out/i.test(message)) {
+              message = 'The server is still busy. Wait a moment and try again.';
+            }
+            reject(new Error(message));
+          });
+        runner[functionName].apply(runner, args);
+      });
+    };
+
+    KSL.showProcessing = function () {
+      var overlay = document.getElementById('appProcessingOverlay');
+      if (overlay) {
+        overlay.classList.remove('hidden');
+      }
+    };
+
+    KSL.hideProcessing = function () {
+      var overlay = document.getElementById('appProcessingOverlay');
+      if (overlay) {
+        overlay.classList.add('hidden');
+      }
+    };
+
+    KSL.showToast = function (message, type) {
+      var host = document.getElementById('appToastHost');
+      if (!host) {
+        return;
+      }
+      var toast = document.createElement('div');
+      var normalizedType = type || 'info';
+      toast.className = 'toast toast-' + normalizedType;
+      toast.textContent = message;
+      host.appendChild(toast);
+      window.setTimeout(function () {
+        toast.remove();
+      }, 4000);
+    };
+
+    KSL.statusClass = function (statusValue) {
+      var normalized = String(statusValue || '')
+        .toLowerCase()
+        .replace(/\s+/g, '');
+      if (!normalized) {
+        return 'status-pending';
+      }
+      return 'status-' + normalized;
+    };
+
+    KSL.formatDate = function (value) {
+      if (!value) {
+        return '';
+      }
+      var date = value instanceof Date ? value : new Date(value);
+      if (isNaN(date.getTime())) {
+        return '';
+      }
+      var dd = String(date.getDate()).padStart(2, '0');
+      var mm = String(date.getMonth() + 1).padStart(2, '0');
+      var yyyy = date.getFullYear();
+      return dd + '/' + mm + '/' + yyyy;
+    };
+
+    KSL.escapeHtml = function (value) {
+      return String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    };
+
+    KSL.navigate = function (page, extraQuery) {
+      var query = page ? '?page=' + encodeURIComponent(page) : '';
+      if (extraQuery) {
+        query += '&' + extraQuery;
+      }
+      window.location.href = KSL.getScriptUrl() + query;
+    };
+
+    KSL.applyShellContext = function (bootstrapData) {
+      var user = bootstrapData.user || {};
+      var role = user.role || '';
+      var userNameElement = document.getElementById('userFullName');
+      var userRoleElement = document.getElementById('userRole');
+      var userAvatarElement = document.getElementById('userAvatar');
+      var appTitleTextElement = document.getElementById('appTitleText');
+      var badgeElement = document.getElementById('notificationBadge');
+
+      if (userNameElement) {
+        userNameElement.textContent = user.fullName || 'Unknown User';
+      }
+      if (userRoleElement) {
+        userRoleElement.textContent = role || '-';
+      }
+      if (userAvatarElement) {
+        userAvatarElement.src =
+          user.profilePhoto ||
+          'https://www.gravatar.com/avatar/?d=mp&f=y';
+      }
+      if (appTitleTextElement && bootstrapData.settings && bootstrapData.settings.APP_TITLE) {
+        appTitleTextElement.textContent = bootstrapData.settings.APP_TITLE;
+      }
+
+      if (badgeElement) {
+        var unreadCount = Number(bootstrapData.unreadNotifications || 0);
+        badgeElement.textContent = String(unreadCount);
+        badgeElement.classList.toggle('hidden', unreadCount < 1);
+      }
+
+      var links = document.querySelectorAll('[data-roles]');
+      links.forEach(function (link) {
+        var rolesCsv = link.dataset.roles || '';
+        var allowedRoles = rolesCsv
+          .split(',')
+          .map(function (part) {
+            return part.trim();
+          })
+          .filter(Boolean);
+        var isAllowed = allowedRoles.includes(role);
+        link.classList.toggle('hidden', !isAllowed);
+      });
+    };
+
+    KSL.requireAuth = function (requiredRoles, onReady) {
+      return KSL.initShell().then(function (bootstrapData) {
+        if (Array.isArray(requiredRoles) && requiredRoles.length > 0) {
+          var role = bootstrapData.user && bootstrapData.user.role;
+          if (!requiredRoles.includes(role)) {
+            KSL.showToast('You do not have access to this page.', 'error');
+            throw new Error('Unauthorized role.');
+          }
+        }
+        if (typeof onReady === 'function') {
+          onReady(bootstrapData);
+        }
+        return bootstrapData;
+      });
+    };
+
+    KSL.readQueryParam = function (key) {
+      var params = new URLSearchParams(window.location.search);
+      return params.get(key) || '';
+    };
+
+    KSL.redirectToLogin = function () {
+      var activePage = KSL.getActivePage();
+      var continueParam = activePage && activePage !== 'login' ? '&continue=' + encodeURIComponent(activePage) : '';
+      KSL.navigate('login', continueParam.replace(/^&/, ''));
+    };
+
+    KSL.initShell = function () {
+      if (KSL.getActivePage() === 'login') {
+        return Promise.resolve({ success: true });
+      }
+
+      if (KSL.state.bootstrap) {
+        return KSL.state.bootstrap;
+      }
+
+      var token = KSL.getSessionToken();
+      if (!token) {
+        KSL.redirectToLogin();
+        return Promise.reject(new Error('No active session.'));
+      }
+
+      KSL.state.bootstrap = KSL.runServer('getAppBootstrap', token, KSL.getActivePage())
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Unable to initialize session.');
+          }
+          var data = response.data || {};
+          KSL.applyShellContext(data);
+          return data;
+        })
+        .catch(function (error) {
+          KSL.clearSessionToken();
+          KSL.redirectToLogin();
+          throw error;
+        });
+
+      return KSL.state.bootstrap;
+    };
+
+    KSL.openModal = function (modalId) {
+      var modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.remove('hidden');
+      }
+    };
+
+    KSL.closeModal = function (modalId) {
+      var modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.add('hidden');
+      }
+    };
+
+    KSL.call = function (functionName) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      KSL.showProcessing();
+      return KSL.runServer.apply(null, [functionName].concat(args))
+        .finally(function () {
+          KSL.hideProcessing();
+        });
+    };
+
+    document.addEventListener('click', function (event) {
+      var closeButton = event.target.closest('[data-close-modal]');
+      if (closeButton) {
+        var modalId = closeButton.getAttribute('data-close-modal');
+        KSL.closeModal(modalId);
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var logoutButton = document.getElementById('logoutButton');
+      if (logoutButton) {
+        logoutButton.addEventListener('click', function () {
+          var token = KSL.getSessionToken();
+          KSL.call('logoutSession', token)
+            .catch(function () {
+              return null;
+            })
+            .finally(function () {
+              KSL.clearSessionToken();
+              KSL.redirectToLogin();
+            });
+        });
+      }
+      if (KSL.getActivePage() !== 'login') {
+        KSL.initShell().catch(function () {
+          return null;
+        });
+      }
+    });
+  })();
+</script>

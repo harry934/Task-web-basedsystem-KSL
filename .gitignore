@@ -1,0 +1,9 @@
+Thumbs.db
+.DS_Store
+*.log
+.env
+.clasp.json
+.claspignore
+node_modules/
+spec_extracted.txt
+*.docx

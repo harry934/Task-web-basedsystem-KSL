@@ -1,0 +1,122 @@
+<? var isLoginPage = activePage === 'login'; ?>
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><?= pageTitle ?></title>
+    <link rel="icon" href="<?= logoUrl ?>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    >
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    >
+    <?!= include('styles'); ?>
+  </head>
+  <body
+    data-active-page="<?= activePage ?>"
+    data-script-url="<?= scriptUrl ?>"
+    data-google-client-id="<?= googleClientId ?>"
+  >
+    <div class="kenya-stripe" aria-hidden="true">
+      <span class="stripe-black"></span>
+      <span class="stripe-red"></span>
+      <span class="stripe-green"></span>
+    </div>
+
+    <div id="appProcessingOverlay" class="processing-overlay hidden">
+      <div class="processing-card">
+        <img src="<?= logoUrl ?>" alt="Kenya Shipyards Limited">
+        <p>Please wait...</p>
+      </div>
+    </div>
+
+    <div id="appToastHost" class="toast-host"></div>
+
+    <? if (isLoginPage) { ?>
+      <main class="login-page-container">
+        <?!= include(contentTemplate); ?>
+      </main>
+    <? } else { ?>
+      <div class="app-shell">
+        <aside class="app-sidebar">
+          <div class="brand-block">
+            <img class="brand-logo-img" src="<?= logoUrl ?>" alt="Kenya Shipyards Limited">
+            <div class="brand-text">
+              <h1 id="appTitleText">Kenya Shipyards Limited</h1>
+              <p>Tasks Management System</p>
+            </div>
+          </div>
+
+          <nav class="sidebar-nav" id="sidebarNav">
+            <? navItems.forEach(function(item) { ?>
+              <a
+                class="nav-link <?= activePage === item.id ? 'active' : '' ?>"
+                href="<?= scriptUrl ?>?page=<?= item.id ?>"
+                data-page="<?= item.id ?>"
+                data-roles="<?= item.roles.join(',') ?>"
+              >
+                <i class="fa-solid <?= item.icon ?>"></i>
+                <span><?= item.label ?></span>
+              </a>
+            <? }); ?>
+          </nav>
+
+          <div class="sidebar-footer">
+            Ministry of Defence
+          </div>
+        </aside>
+
+        <div class="app-main">
+          <header class="app-topbar">
+            <div class="topbar-left">
+              <img class="topbar-logo" src="<?= logoUrl ?>" alt="Kenya Shipyards Limited">
+              <div>
+                <p class="topbar-kicker">Republic of Kenya</p>
+                <h2><?= pageTitle ?></h2>
+              </div>
+            </div>
+            <div class="topbar-right">
+              <button id="notificationButton" class="icon-button" type="button" title="Notifications">
+                <i class="fa-solid fa-bell"></i>
+                <span id="notificationBadge" class="badge hidden">0</span>
+              </button>
+              <div class="user-chip">
+                <img id="userAvatar" alt="User profile photo">
+                <div class="user-meta">
+                  <strong id="userFullName">Loading...</strong>
+                  <span id="userRole">-</span>
+                </div>
+              </div>
+              <button id="logoutButton" class="btn btn-outline" type="button">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                Sign out
+              </button>
+            </div>
+          </header>
+
+          <main class="content-area">
+            <?!= include(contentTemplate); ?>
+          </main>
+        </div>
+      </div>
+    <? } ?>
+
+    <script>
+      window.APP_TEMPLATE_STATE = {
+        activePage: "<?= activePage ?>",
+        scriptUrl: "<?= scriptUrl ?>",
+        appTitle: "<?= appTitle ?>",
+        logoUrl: "<?= logoUrl ?>",
+        navItems: <?!= JSON.stringify(navItems) ?>
+      };
+    </script>
+    <?!= include('scripts'); ?>
+  </body>
+</html>

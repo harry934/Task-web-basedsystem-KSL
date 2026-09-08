@@ -1,0 +1,367 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>User Management</h1>
+    <p>Review and manage account approval, roles, and access status.</p>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="usersRefreshButton" class="btn btn-primary" type="button">
+          <i class="fa-solid fa-rotate-right"></i>
+          Refresh
+        </button>
+      </div>
+      <div class="toolbar-right">
+        <input id="usersSearchInput" class="input" type="search" placeholder="Search users..." style="min-width: 220px;">
+        <select id="usersRoleFilter" class="select" style="min-width: 150px;">
+          <option value="">All roles</option>
+        </select>
+        <select id="usersStatusFilter" class="select" style="min-width: 170px;">
+          <option value="">All statuses</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Department</th>
+          <th>Last Login</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="usersTableBody">
+        <tr>
+          <td colspan="7" class="empty-state">Loading users...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="usersPagination" class="pagination"></div>
+</section>
+
+<div id="userApprovalModalBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Approve User Account</h3>
+      <button class="btn btn-outline" type="button" data-close-modal="userApprovalModalBackdrop">
+        <i class="fa-solid fa-xmark"></i>
+        Close
+      </button>
+    </div>
+
+    <form id="userApprovalForm">
+      <input id="approvalUserId" type="hidden">
+      <div class="form-grid">
+        <div class="field">
+          <label for="approvalEmployeeId">Employee ID</label>
+          <input id="approvalEmployeeId" class="input" type="text" required>
+        </div>
+        <div class="field">
+          <label for="approvalDepartment">Department</label>
+          <input id="approvalDepartment" class="input" type="text" required>
+        </div>
+        <div class="field">
+          <label for="approvalJobTitle">Job Title</label>
+          <input id="approvalJobTitle" class="input" type="text" required>
+        </div>
+        <div class="field">
+          <label for="approvalRole">Role</label>
+          <select id="approvalRole" class="select" required></select>
+        </div>
+        <div class="field">
+          <label for="approvalSupervisorId">Supervisor ID</label>
+          <input id="approvalSupervisorId" class="input" type="text">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" data-close-modal="userApprovalModalBackdrop">Cancel</button>
+        <button class="btn btn-primary" type="submit">
+          <i class="fa-solid fa-check-circle"></i>
+          Approve User
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var state = {
+      users: [],
+      page: 1,
+      pageSize: 25,
+      pages: 1
+    };
+
+    function getFilters() {
+      return {
+        query: document.getElementById('usersSearchInput').value.trim(),
+        role: document.getElementById('usersRoleFilter').value,
+        status: document.getElementById('usersStatusFilter').value,
+        page: state.page,
+        pageSize: state.pageSize
+      };
+    }
+
+    function renderDropdownOptions(selectId, values, placeholder) {
+      var select = document.getElementById(selectId);
+      if (!select) {
+        return;
+      }
+      var existingPlaceholder = placeholder ? '<option value="">' + KSL.escapeHtml(placeholder) + '</option>' : '';
+      var options = (values || []).map(function (value) {
+        return '<option value="' + KSL.escapeHtml(value) + '">' + KSL.escapeHtml(value) + '</option>';
+      });
+      select.innerHTML = existingPlaceholder + options.join('');
+    }
+
+    function renderUsersTable() {
+      var body = document.getElementById('usersTableBody');
+      if (!body) {
+        return;
+      }
+
+      if (!state.users.length) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fa-solid fa-users"></i><p>No users found.</p></td></tr>';
+        return;
+      }
+
+      body.innerHTML = state.users
+        .map(function (user) {
+          var statusClass = KSL.statusClass(user.accountStatus);
+          var actions = [];
+          if ((user.accountStatus || '').toLowerCase() === 'pending approval') {
+            actions.push(
+              '<button class="btn btn-secondary" type="button" data-action="approve" data-user-id="' +
+                KSL.escapeHtml(user.userId) +
+                '"><i class="fa-solid fa-user-check"></i>Approve</button>'
+            );
+          }
+          actions.push(
+            '<button class="btn btn-outline" type="button" data-action="status" data-status="Active" data-user-id="' +
+              KSL.escapeHtml(user.userId) +
+              '">Activate</button>'
+          );
+          actions.push(
+            '<button class="btn btn-outline" type="button" data-action="status" data-status="Suspended" data-user-id="' +
+              KSL.escapeHtml(user.userId) +
+              '">Suspend</button>'
+          );
+          actions.push(
+            '<button class="btn btn-danger" type="button" data-action="status" data-status="Disabled" data-user-id="' +
+              KSL.escapeHtml(user.userId) +
+              '">Disable</button>'
+          );
+
+          return (
+            '<tr>' +
+            '<td>' +
+            KSL.escapeHtml(user.fullName) +
+            '</td>' +
+            '<td>' +
+            KSL.escapeHtml(user.email) +
+            '</td>' +
+            '<td>' +
+            KSL.escapeHtml(user.role || '-') +
+            '</td>' +
+            '<td><span class="status-badge ' +
+            statusClass +
+            '">' +
+            KSL.escapeHtml(user.accountStatus || '-') +
+            '</span></td>' +
+            '<td>' +
+            KSL.escapeHtml(user.department || '-') +
+            '</td>' +
+            '<td>' +
+            KSL.escapeHtml(KSL.formatDate(user.lastLogin) || '-') +
+            '</td>' +
+            '<td><div class="toolbar-left">' +
+            actions.join('') +
+            '</div></td>' +
+            '</tr>'
+          );
+        })
+        .join('');
+    }
+
+    function renderPagination() {
+      var pagination = document.getElementById('usersPagination');
+      if (!pagination) {
+        return;
+      }
+      pagination.innerHTML =
+        '<button type="button" id="usersPrevPage" ' +
+        (state.page <= 1 ? 'disabled' : '') +
+        '>Previous</button>' +
+        '<button type="button" disabled>Page ' +
+        state.page +
+        ' of ' +
+        state.pages +
+        '</button>' +
+        '<button type="button" id="usersNextPage" ' +
+        (state.page >= state.pages ? 'disabled' : '') +
+        '>Next</button>';
+
+      var prevButton = document.getElementById('usersPrevPage');
+      var nextButton = document.getElementById('usersNextPage');
+      if (prevButton) {
+        prevButton.addEventListener('click', function () {
+          state.page -= 1;
+          loadUsers();
+        });
+      }
+      if (nextButton) {
+        nextButton.addEventListener('click', function () {
+          state.page += 1;
+          loadUsers();
+        });
+      }
+    }
+
+    function loadUsers() {
+      var filters = getFilters();
+      KSL.call('listUsers', KSL.getSessionToken(), filters)
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Failed to load users.');
+          }
+          var payload = response.data || {};
+          state.users = payload.items || [];
+          var pagination = payload.pagination || {};
+          state.page = Number(pagination.page || 1);
+          state.pages = Number(pagination.pages || 1);
+          renderUsersTable();
+          renderPagination();
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Failed to load users.', 'error');
+        });
+    }
+
+    function openApprovalModal(userId) {
+      var selected = state.users.find(function (user) {
+        return user.userId === userId;
+      });
+      if (!selected) {
+        KSL.showToast('Selected user was not found.', 'error');
+        return;
+      }
+      document.getElementById('approvalUserId').value = selected.userId;
+      document.getElementById('approvalEmployeeId').value = selected.employeeId || '';
+      document.getElementById('approvalDepartment').value = selected.department || '';
+      document.getElementById('approvalJobTitle').value = selected.jobTitle || '';
+      document.getElementById('approvalSupervisorId').value = selected.supervisorId || '';
+      document.getElementById('approvalRole').value = selected.role || 'Employee';
+      KSL.openModal('userApprovalModalBackdrop');
+    }
+
+    function submitApproval(event) {
+      event.preventDefault();
+      var payload = {
+        userId: document.getElementById('approvalUserId').value.trim(),
+        employeeId: document.getElementById('approvalEmployeeId').value.trim(),
+        department: document.getElementById('approvalDepartment').value.trim(),
+        jobTitle: document.getElementById('approvalJobTitle').value.trim(),
+        role: document.getElementById('approvalRole').value,
+        supervisorId: document.getElementById('approvalSupervisorId').value.trim(),
+        accountStatus: 'Active'
+      };
+      KSL.call('approveUser', KSL.getSessionToken(), payload)
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Approval failed.');
+          }
+          KSL.showToast('User approved successfully.', 'success');
+          KSL.closeModal('userApprovalModalBackdrop');
+          loadUsers();
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Approval failed.', 'error');
+        });
+    }
+
+    function updateStatus(userId, status) {
+      var confirmed = window.confirm('Change account status to "' + status + '"?');
+      if (!confirmed) {
+        return;
+      }
+      KSL.call('updateUserAccountStatus', KSL.getSessionToken(), {
+        userId: userId,
+        accountStatus: status
+      })
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Status update failed.');
+          }
+          KSL.showToast('Account status updated.', 'success');
+          loadUsers();
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Status update failed.', 'error');
+        });
+    }
+
+    function bindTableActions() {
+      var body = document.getElementById('usersTableBody');
+      if (!body) {
+        return;
+      }
+      body.addEventListener('click', function (event) {
+        var button = event.target.closest('button[data-action]');
+        if (!button) {
+          return;
+        }
+        var action = button.dataset.action;
+        var userId = button.dataset.userId || '';
+        if (action === 'approve') {
+          openApprovalModal(userId);
+          return;
+        }
+        if (action === 'status') {
+          updateStatus(userId, button.dataset.status || '');
+        }
+      });
+    }
+
+    function bindFilters() {
+      document.getElementById('usersRefreshButton').addEventListener('click', function () {
+        state.page = 1;
+        loadUsers();
+      });
+      document.getElementById('usersSearchInput').addEventListener('input', function () {
+        state.page = 1;
+        loadUsers();
+      });
+      document.getElementById('usersRoleFilter').addEventListener('change', function () {
+        state.page = 1;
+        loadUsers();
+      });
+      document.getElementById('usersStatusFilter').addEventListener('change', function () {
+        state.page = 1;
+        loadUsers();
+      });
+      document.getElementById('userApprovalForm').addEventListener('submit', submitApproval);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator'], function (context) {
+        var dimensions = context.dimensions || {};
+        renderDropdownOptions('usersRoleFilter', dimensions.Roles || [], 'All roles');
+        renderDropdownOptions('usersStatusFilter', dimensions['Account Statuses'] || [], 'All statuses');
+        renderDropdownOptions('approvalRole', dimensions.Roles || ['Employee'], '');
+        bindTableActions();
+        bindFilters();
+        loadUsers();
+      });
+    });
+  })();
+</script>

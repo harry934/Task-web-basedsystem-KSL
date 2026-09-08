@@ -1,0 +1,344 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Departments</h1>
+    <p>Maintain organizational departments used in task assignment and reporting.</p>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="newDepartmentButton" class="btn btn-primary" type="button">
+          <i class="fa-solid fa-plus"></i>
+          New Department
+        </button>
+        <button id="departmentsRefreshButton" class="btn btn-outline" type="button">
+          <i class="fa-solid fa-rotate-right"></i>
+          Refresh
+        </button>
+      </div>
+      <div class="toolbar-right">
+        <input id="departmentsSearchInput" class="input" type="search" placeholder="Search departments..." style="min-width: 240px;">
+        <select id="departmentsStatusFilter" class="select" style="min-width: 150px;">
+          <option value="">All statuses</option>
+          <option value="Active">Active</option>
+          <option value="Archived">Archived</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Department ID</th>
+          <th>Name</th>
+          <th>Head</th>
+          <th>Status</th>
+          <th>Updated</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="departmentsTableBody">
+        <tr>
+          <td colspan="6" class="empty-state">Loading departments...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="departmentsPagination" class="pagination"></div>
+</section>
+
+<div id="departmentModalBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="departmentModalTitle">Create Department</h3>
+      <button class="btn btn-outline" type="button" data-close-modal="departmentModalBackdrop">
+        <i class="fa-solid fa-xmark"></i>
+        Close
+      </button>
+    </div>
+
+    <form id="departmentForm">
+      <input id="departmentIdInput" type="hidden">
+      <div class="form-grid">
+        <div class="field">
+          <label for="departmentNameInput">Department Name</label>
+          <input id="departmentNameInput" class="input" type="text" required>
+        </div>
+        <div class="field">
+          <label for="departmentHeadInput">Department Head</label>
+          <input id="departmentHeadInput" class="input" type="text">
+        </div>
+        <div class="field full">
+          <label for="departmentDescriptionInput">Description</label>
+          <textarea id="departmentDescriptionInput" class="textarea"></textarea>
+        </div>
+        <div class="field">
+          <label for="departmentStatusInput">Status</label>
+          <select id="departmentStatusInput" class="select">
+            <option value="Active">Active</option>
+            <option value="Archived">Archived</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" data-close-modal="departmentModalBackdrop">Cancel</button>
+        <button class="btn btn-primary" type="submit">
+          <i class="fa-solid fa-floppy-disk"></i>
+          Save Department
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var state = {
+      departments: [],
+      page: 1,
+      pages: 1,
+      pageSize: 25
+    };
+
+    function getFilters() {
+      return {
+        query: document.getElementById('departmentsSearchInput').value.trim(),
+        status: document.getElementById('departmentsStatusFilter').value,
+        page: state.page,
+        pageSize: state.pageSize
+      };
+    }
+
+    function renderDepartments() {
+      var body = document.getElementById('departmentsTableBody');
+      if (!body) {
+        return;
+      }
+      if (!state.departments.length) {
+        body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fa-solid fa-building"></i><p>No departments found.</p></td></tr>';
+        return;
+      }
+
+      body.innerHTML = state.departments
+        .map(function (department) {
+          return (
+            '<tr>' +
+            '<td>' +
+            KSL.escapeHtml(department.departmentId) +
+            '</td>' +
+            '<td>' +
+            KSL.escapeHtml(department.departmentName) +
+            '</td>' +
+            '<td>' +
+            KSL.escapeHtml(department.departmentHead || '-') +
+            '</td>' +
+            '<td><span class="status-badge ' +
+            KSL.statusClass(department.status) +
+            '">' +
+            KSL.escapeHtml(department.status || '-') +
+            '</span></td>' +
+            '<td>' +
+            KSL.escapeHtml(KSL.formatDate(department.updatedDate) || '-') +
+            '</td>' +
+            '<td><div class="toolbar-left">' +
+            '<button class="btn btn-outline" type="button" data-action="edit" data-id="' +
+            KSL.escapeHtml(department.departmentId) +
+            '">Edit</button>' +
+            '<button class="btn btn-danger" type="button" data-action="archive" data-id="' +
+            KSL.escapeHtml(department.departmentId) +
+            '">Archive</button>' +
+            '</div></td>' +
+            '</tr>'
+          );
+        })
+        .join('');
+    }
+
+    function renderPagination() {
+      var pagination = document.getElementById('departmentsPagination');
+      if (!pagination) {
+        return;
+      }
+      pagination.innerHTML =
+        '<button type="button" id="departmentsPrevPage" ' +
+        (state.page <= 1 ? 'disabled' : '') +
+        '>Previous</button>' +
+        '<button type="button" disabled>Page ' +
+        state.page +
+        ' of ' +
+        state.pages +
+        '</button>' +
+        '<button type="button" id="departmentsNextPage" ' +
+        (state.page >= state.pages ? 'disabled' : '') +
+        '>Next</button>';
+
+      var prev = document.getElementById('departmentsPrevPage');
+      var next = document.getElementById('departmentsNextPage');
+      if (prev) {
+        prev.addEventListener('click', function () {
+          state.page -= 1;
+          loadDepartments();
+        });
+      }
+      if (next) {
+        next.addEventListener('click', function () {
+          state.page += 1;
+          loadDepartments();
+        });
+      }
+    }
+
+    function loadDepartments(retryCount) {
+      var attempts = Number(retryCount || 0);
+      KSL.call('listDepartments', KSL.getSessionToken(), getFilters())
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Failed to load departments.');
+          }
+          var payload = response.data || {};
+          state.departments = payload.items || [];
+          var pagination = payload.pagination || {};
+          state.page = Number(pagination.page || 1);
+          state.pages = Number(pagination.pages || 1);
+          renderDepartments();
+          renderPagination();
+        })
+        .catch(function (error) {
+          if (attempts < 1) {
+            window.setTimeout(function () {
+              loadDepartments(attempts + 1);
+            }, 800);
+            return;
+          }
+          KSL.showToast(error.message || 'Failed to load departments.', 'error');
+        });
+    }
+
+    function resetDepartmentForm() {
+      document.getElementById('departmentForm').reset();
+      document.getElementById('departmentIdInput').value = '';
+      document.getElementById('departmentStatusInput').value = 'Active';
+      document.getElementById('departmentModalTitle').textContent = 'Create Department';
+    }
+
+    function openCreateModal() {
+      resetDepartmentForm();
+      KSL.openModal('departmentModalBackdrop');
+    }
+
+    function openEditModal(departmentId) {
+      var department = state.departments.find(function (item) {
+        return item.departmentId === departmentId;
+      });
+      if (!department) {
+        KSL.showToast('Department not found.', 'error');
+        return;
+      }
+
+      document.getElementById('departmentModalTitle').textContent = 'Edit Department';
+      document.getElementById('departmentIdInput').value = department.departmentId;
+      document.getElementById('departmentNameInput').value = department.departmentName || '';
+      document.getElementById('departmentHeadInput').value = department.departmentHead || '';
+      document.getElementById('departmentDescriptionInput').value =
+        department.departmentDescription || '';
+      document.getElementById('departmentStatusInput').value = department.status || 'Active';
+      KSL.openModal('departmentModalBackdrop');
+    }
+
+    function submitDepartment(event) {
+      event.preventDefault();
+      var departmentId = document.getElementById('departmentIdInput').value.trim();
+      var payload = {
+        departmentId: departmentId,
+        departmentName: document.getElementById('departmentNameInput').value.trim(),
+        departmentHead: document.getElementById('departmentHeadInput').value.trim(),
+        departmentDescription: document.getElementById('departmentDescriptionInput').value.trim(),
+        status: document.getElementById('departmentStatusInput').value
+      };
+
+      var serverFunction = departmentId ? 'updateDepartment' : 'createDepartment';
+      KSL.call(serverFunction, KSL.getSessionToken(), payload)
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Unable to save department.');
+          }
+          KSL.showToast('Department saved successfully.', 'success');
+          KSL.closeModal('departmentModalBackdrop');
+          var saved = response.data && response.data.department;
+          if (saved && !departmentId) {
+            state.departments = [saved].concat(state.departments || []);
+            renderDepartments();
+          }
+          state.page = 1;
+          window.setTimeout(function () {
+            loadDepartments();
+          }, 400);
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Unable to save department.', 'error');
+        });
+    }
+
+    function archiveDepartment(departmentId) {
+      if (!window.confirm('Archive this department? This action is reversible by editing status.')) {
+        return;
+      }
+      KSL.call('archiveDepartment', KSL.getSessionToken(), {
+        departmentId: departmentId
+      })
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Unable to archive department.');
+          }
+          KSL.showToast('Department archived.', 'success');
+          loadDepartments();
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Unable to archive department.', 'error');
+        });
+    }
+
+    function bindEvents() {
+      document.getElementById('newDepartmentButton').addEventListener('click', openCreateModal);
+      document.getElementById('departmentsRefreshButton').addEventListener('click', function () {
+        state.page = 1;
+        loadDepartments();
+      });
+      document.getElementById('departmentsSearchInput').addEventListener(
+        'input',
+        KSL.debounce(function () {
+          state.page = 1;
+          loadDepartments();
+        }, 450)
+      );
+      document.getElementById('departmentsStatusFilter').addEventListener('change', function () {
+        state.page = 1;
+        loadDepartments();
+      });
+      document.getElementById('departmentForm').addEventListener('submit', submitDepartment);
+
+      document.getElementById('departmentsTableBody').addEventListener('click', function (event) {
+        var button = event.target.closest('button[data-action]');
+        if (!button) {
+          return;
+        }
+        var action = button.dataset.action;
+        var id = button.dataset.id || '';
+        if (action === 'edit') {
+          openEditModal(id);
+        } else if (action === 'archive') {
+          archiveDepartment(id);
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator', 'Manager'], function () {
+        bindEvents();
+        loadDepartments();
+      });
+    });
+  })();
+</script>

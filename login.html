@@ -1,0 +1,182 @@
+<section class="login-card">
+  <img
+    class="login-logo"
+    src="https://kenyashipyards.co.ke/wp-content/uploads/2022/06/cropped-KSL-High-quality-Logo-300x273.png"
+    alt="Kenya Shipyards Limited"
+  >
+  <p class="login-kicker">Ministry of Defence</p>
+  <h1>Kenya Shipyards Limited</h1>
+  <p>Sign in to the Tasks Management System.</p>
+
+  <div class="login-rules">
+    <strong style="display: block; margin-bottom: 6px;">Access rules</strong>
+    <ul style="margin: 0; padding-left: 18px; color: #5b6775; font-size: 13px;">
+      <li>First sign-in creates a pending account for administrator approval.</li>
+      <li>Only active accounts can access operational pages.</li>
+      <li>All sign-in events are recorded in the audit log.</li>
+    </ul>
+  </div>
+
+  <div id="loginAlert" class="card hidden" style="margin-bottom: 14px; border-left: 4px solid #0ea5e9;">
+    <span id="loginAlertText"></span>
+  </div>
+
+  <div id="googleSignInButton" style="min-height: 44px;"></div>
+  <p id="oauthHint" class="page-note" style="margin: 8px 0 0;"></p>
+  <div style="margin-top: 10px;">
+    <button id="workspaceSessionButton" class="btn btn-primary" type="button" style="width: 100%; justify-content: center;">
+      <i class="fa-solid fa-right-to-bracket"></i>
+      Sign in with Google account
+    </button>
+  </div>
+</section>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+  (function () {
+    function showLoginMessage(message, isError) {
+      var alertBox = document.getElementById('loginAlert');
+      var alertText = document.getElementById('loginAlertText');
+      if (!alertBox || !alertText) {
+        return;
+      }
+      alertText.textContent = message || '';
+      alertBox.classList.remove('hidden');
+      alertBox.style.borderLeftColor = isError ? '#dc2626' : '#0ea5e9';
+    }
+
+    function handleCredentialResponse(response) {
+      if (!response || !response.credential) {
+        showLoginMessage('Google sign-in did not return a credential token.', true);
+        return;
+      }
+
+      KSL.call('loginWithGoogle', response.credential)
+        .then(function (result) {
+          if (!result || !result.success) {
+            throw new Error((result && result.message) || 'Unable to complete sign-in.');
+          }
+
+          var payload = result.data || {};
+          if (payload.requiresApproval) {
+            showLoginMessage(
+              'Account created successfully. Access is pending administrator approval.',
+              false
+            );
+            return;
+          }
+
+          if (!payload.sessionToken) {
+            throw new Error('Session token is missing from login response.');
+          }
+
+          KSL.setSessionToken(payload.sessionToken);
+          var continuePage = KSL.readQueryParam('continue') || 'dashboard';
+          KSL.navigate(continuePage);
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Login failed.', 'error');
+          showLoginMessage(error.message || 'Login failed.', true);
+        });
+    }
+
+    function handleWorkspaceSessionLogin() {
+      KSL.call('loginWithWorkspaceSession')
+        .then(function (result) {
+          if (!result || !result.success) {
+            throw new Error((result && result.message) || 'Unable to complete sign-in.');
+          }
+
+          var payload = result.data || {};
+          if (payload.requiresApproval) {
+            showLoginMessage(
+              'Account created successfully. Access is pending administrator approval.',
+              false
+            );
+            return;
+          }
+          if (!payload.sessionToken) {
+            throw new Error('Session token is missing from login response.');
+          }
+
+          KSL.setSessionToken(payload.sessionToken);
+          var continuePage = KSL.readQueryParam('continue') || 'dashboard';
+          KSL.navigate(continuePage);
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Login failed.', 'error');
+          showLoginMessage(error.message || 'Login failed.', true);
+        });
+    }
+
+    function initializeGoogleSignIn() {
+      var clientId = KSL.getGoogleClientId();
+      var fallbackButton = document.getElementById('workspaceSessionButton');
+      var oauthHint = document.getElementById('oauthHint');
+      if (fallbackButton) {
+        fallbackButton.removeEventListener('click', handleWorkspaceSessionLogin);
+        fallbackButton.addEventListener('click', handleWorkspaceSessionLogin);
+      }
+      if (!clientId) {
+        if (oauthHint) {
+          oauthHint.textContent = 'OAuth client is not configured. Use session login below.';
+        }
+        showLoginMessage(
+          'Google client ID is not configured. Using Apps Script session login mode.',
+          false
+        );
+        return;
+      }
+
+      try {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleCredentialResponse
+        });
+
+        google.accounts.id.renderButton(document.getElementById('googleSignInButton'), {
+          theme: 'outline',
+          size: 'large',
+          width: 340,
+          text: 'signin_with',
+          shape: 'rectangular'
+        });
+        if (oauthHint) {
+          oauthHint.textContent = 'If Google OAuth fails, use session login below.';
+        }
+      } catch (error) {
+        if (oauthHint) {
+          oauthHint.textContent = 'OAuth initialization failed. Use session login below.';
+        }
+        showLoginMessage(
+          'OAuth initialization failed. Continue with Apps Script session login.',
+          true
+        );
+      }
+    }
+
+    function tryAutoRedirectForExistingSession() {
+      var existingToken = KSL.getSessionToken();
+      if (!existingToken) {
+        return;
+      }
+      KSL.call('getAppBootstrap', existingToken, 'dashboard')
+        .then(function (result) {
+          if (result && result.success) {
+            var continuePage = KSL.readQueryParam('continue') || 'dashboard';
+            KSL.navigate(continuePage);
+          } else {
+            KSL.clearSessionToken();
+          }
+        })
+        .catch(function () {
+          KSL.clearSessionToken();
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      tryAutoRedirectForExistingSession();
+      window.setTimeout(initializeGoogleSignIn, 300);
+    });
+  })();
+</script>
