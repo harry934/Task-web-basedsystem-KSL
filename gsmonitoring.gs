@@ -97,8 +97,11 @@ function getMonitoredTaskDetail(sessionToken, payload) {
         return normalizeString_(record['Task ID']) === taskId;
       })
       .map(mapProgressForResponse_);
+    var taskRecord = findTaskRecord_(taskId) || {};
+    var subtasks = getSubtasksForTask_(taskId).map(mapSubtask_);
     return successResponse_('Task detail loaded.', {
-      task: mapTaskForResponse_(findTaskRecord_(taskId) || {}),
+      task: mapTaskForResponse_(taskRecord),
+      subtasks: subtasks,
       assignments: assignments,
       updates: updates,
       comments: (collaboration.data && collaboration.data.comments) || [],

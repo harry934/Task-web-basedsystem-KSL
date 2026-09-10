@@ -85,7 +85,7 @@
       }).catch(function (error) { KSL.showToast(error.message || 'Failed to load notifications.', 'error'); });
     }
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'], function () {
         document.getElementById('markAllReadButton').addEventListener('click', function () {
           KSL.call('markAllNotificationsRead', KSL.getSessionToken()).then(function (response) {
             if (!response || !response.success) throw new Error((response && response.message) || 'Update failed.');

@@ -24,6 +24,17 @@
   </div>
 
   <div id="dashboardKpiGrid" class="kpi-grid"></div>
+  <div id="staffWorkCard" class="card hidden">
+    <strong>Look up staff work</strong>
+    <p class="page-note">Search a staff member by name, username, or Staff UID to see their tasks and subtask progress.</p>
+    <div class="toolbar" style="margin-top: 10px;">
+      <div class="toolbar-left">
+        <input id="dashboardStaffSearchInput" class="input" type="search" placeholder="Name, username, or Staff UID" style="min-width: 260px;">
+        <button id="dashboardStaffSearchButton" class="btn btn-primary" type="button">Search</button>
+      </div>
+    </div>
+    <div id="dashboardStaffWorkResults"></div>
+  </div>
   <div id="dashboardCharts" class="chart-grid"></div>
 </section>
 
@@ -132,7 +143,20 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'], function (bootstrap) {
+        var role = bootstrap && bootstrap.user && bootstrap.user.role;
+        if (KSL.isStaffLike(role)) {
+          document.getElementById('dashboardDepartmentInput').classList.add('hidden');
+          document.getElementById('dashboardSupervisorInput').classList.add('hidden');
+        }
+        if (KSL.canSearchStaffWork(role)) {
+          document.getElementById('staffWorkCard').classList.remove('hidden');
+          KSL.bindStaffWorkSearch({
+            inputId: 'dashboardStaffSearchInput',
+            buttonId: 'dashboardStaffSearchButton',
+            resultsId: 'dashboardStaffWorkResults'
+          });
+        }
         loadDashboard();
         document.getElementById('refreshDashboardButton').addEventListener('click', loadDashboard);
         document.getElementById('exportDashboardButton').addEventListener('click', function () { exportFile('csv'); });

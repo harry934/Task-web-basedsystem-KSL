@@ -1,19 +1,19 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>Progress Updates</h1>
-    <p>Review employee progress submissions. Updates are kept as history and are not overwritten.</p>
+    <p>Review staff progress submissions. Updates are kept as history and are not overwritten.</p>
   </div>
 
   <div class="card" id="progressCreateForm">
     <strong>Create progress update</strong>
     <form id="progressCreateFormElement" class="form-grid" style="margin-top: 10px;">
       <div class="field">
-        <label for="progressTaskIdInput">Task ID</label>
-        <input id="progressTaskIdInput" class="input" type="text" required>
+        <label for="progressTaskIdInput">Task</label>
+        <select id="progressTaskIdInput" class="select" required></select>
       </div>
       <div class="field">
-        <label for="progressEmployeeIdInput">Employee ID</label>
-        <input id="progressEmployeeIdInput" class="input" type="text" placeholder="Defaults to your employee ID">
+        <label for="progressEmployeeIdInput">Staff</label>
+        <select id="progressEmployeeIdInput" class="select"></select>
       </div>
       <div class="field">
         <label for="progressValueInput">Progress %</label>
@@ -86,7 +86,7 @@
         <tr>
           <th>Update</th>
           <th>Task</th>
-          <th>Employee</th>
+          <th>Staff</th>
           <th>Progress</th>
           <th>Status</th>
           <th>Review</th>
@@ -105,6 +105,52 @@
 <script>
   (function () {
     var state = { page: 1, pages: 1, pageSize: 25 };
+
+    function fillTaskSelect(items) {
+      var select = document.getElementById('progressTaskIdInput');
+      var html = '<option value="">Select task</option>';
+      html += (items || [])
+        .map(function (item) {
+          var id = item.taskId || '';
+          var label = id + (item.taskTitle ? ' — ' + item.taskTitle : '');
+          return (
+            '<option value="' +
+            KSL.escapeHtml(id) +
+            '">' +
+            KSL.escapeHtml(label) +
+            '</option>'
+          );
+        })
+        .join('');
+      select.innerHTML = html;
+    }
+
+    function loadLookups() {
+      KSL.call('listStaffOptions', KSL.getSessionToken())
+        .then(function (response) {
+          var people = (response && response.data && response.data.items) || [];
+          var currentId = (KSL.state.currentUser && KSL.state.currentUser.employeeId) || '';
+          KSL.fillStaffSelect('progressEmployeeIdInput', people, 'Select staff', currentId);
+          if (KSL.isStaffLike()) {
+            document.getElementById('progressEmployeeIdInput').value = currentId;
+            document.getElementById('progressEmployeeIdInput').disabled = true;
+          }
+        })
+        .catch(function () {
+          return null;
+        });
+      var taskCall = KSL.isStaffLike()
+        ? KSL.call('listMyTasks', KSL.getSessionToken(), { page: 1, pageSize: 200 })
+        : KSL.call('listTasks', KSL.getSessionToken(), { page: 1, pageSize: 200, recordStatus: 'Active' });
+      taskCall
+        .then(function (response) {
+          var items = (response && response.data && response.data.items) || [];
+          fillTaskSelect(items);
+        })
+        .catch(function () {
+          fillTaskSelect([]);
+        });
+    }
 
     function getFilters() {
       return {
@@ -204,7 +250,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'], function () {
+        loadLookups();
         document.getElementById('progressNewUpdateButton').addEventListener('click', function () {
           document.getElementById('progressTaskIdInput').focus();
         });
@@ -230,6 +277,7 @@
               KSL.showToast('Progress update saved.', 'success');
               document.getElementById('progressCreateFormElement').reset();
               document.getElementById('progressHoursInput').value = 0;
+              loadLookups();
               state.page = 1;
               loadProgress();
             })

@@ -6,7 +6,7 @@ function listMyTasks(sessionToken, options) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'mytasks'
     );
     var employeeId = getCurrentEmployeeId_(authContext.user);
@@ -17,7 +17,7 @@ function listMyTasks(sessionToken, options) {
     var pageSize = normalizeNumber_(filters.pageSize, 25);
     var dueSoonDays = getDueSoonDays_();
 
-    if (!employeeId && authContext.user.role === 'Employee') {
+    if (!employeeId && isStaffLikeRole_(authContext.user.role)) {
       return successResponse_('No employee ID is linked to this account yet.', buildPagedResult_([], page, pageSize));
     }
 
@@ -47,6 +47,16 @@ function listMyTasks(sessionToken, options) {
         mapped.isOverdue = String(task['Is Overdue']).toLowerCase() === 'true';
         mapped.daysRemaining = normalizeString_(task['Days Remaining']);
         mapped.blocker = normalizeString_(task.Blocker);
+        mapped.subtasks = getSubtasksForTask_(record['Task ID']).map(mapSubtask_);
+        mapped.progress = mapped.subtasks.length
+          ? Math.round(
+              (mapped.subtasks.filter(function (item) {
+                return String(item.status).toLowerCase() === 'completed';
+              }).length /
+                mapped.subtasks.length) *
+                100
+            )
+          : normalizeNumber_(task['Progress %'] || record['Employee Progress %'], 0);
         return mapped;
       })
       .filter(function (item) {
@@ -80,7 +90,7 @@ function respondToAssignment(sessionToken, payload) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'mytasks'
     );
     var assignmentId = normalizeString_(payload && payload.assignmentId);
@@ -100,7 +110,7 @@ function respondToAssignment(sessionToken, payload) {
     }
 
     var employeeId = getCurrentEmployeeId_(authContext.user);
-    if (employeeId && normalizeString_(current['Employee ID']) !== employeeId && authContext.user.role === 'Employee') {
+    if (employeeId && normalizeString_(current['Employee ID']) !== employeeId && isStaffLikeRole_(authContext.user.role)) {
       throw new Error('You can only respond to your own assignments.');
     }
 
@@ -151,7 +161,7 @@ function submitMyProgress(sessionToken, payload) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'mytasks'
     );
     var input = payload || {};
@@ -176,9 +186,9 @@ function submitMyProgress(sessionToken, payload) {
 
     var employeeId = getCurrentEmployeeId_(authContext.user);
     if (
+      isStaffLikeRole_(authContext.user.role) &&
       employeeId &&
-      normalizeString_(assignment['Employee ID']) !== employeeId &&
-      authContext.user.role === 'Employee'
+      normalizeString_(assignment['Employee ID']) !== employeeId
     ) {
       throw new Error('You can only update your own assignments.');
     }
@@ -237,22 +247,27 @@ function submitMyProgress(sessionToken, payload) {
 
     var task = findTaskRecord_(assignment['Task ID']);
     if (task) {
-      var taskSchema = resolveSchema_('TASKS');
-      var taskSheet = getSheetBySchema_(taskSchema);
-      var updatedTask = Object.assign({}, task);
-      updatedTask['Progress %'] = progress;
-      updatedTask.Status = status.toLowerCase() === 'completed' ? 'Completed' : 'In Progress';
-      updatedTask.Blocker = normalizeString_(input.blockers) ? 'Yes' : updatedTask.Blocker;
-      updatedTask['Blocker Description'] = normalizeString_(input.blockers) || updatedTask['Blocker Description'];
-      updatedTask['Actual Hours'] =
-        normalizeNumber_(updatedTask['Actual Hours'], 0) + normalizeNumber_(input.hoursWorked, 0);
-      updatedTask['Updated Timestamp'] = now;
-      updatedTask['Updated By'] = authContext.user.userId;
-      if (updatedTask.Status === 'Completed') {
-        updatedTask['Completed Date'] = now;
+      var existingSubs = getSubtasksForTask_(assignment['Task ID']);
+      if (!existingSubs.length) {
+        var taskSchema = resolveSchema_('TASKS');
+        var taskSheet = getSheetBySchema_(taskSchema);
+        var updatedTask = Object.assign({}, task);
+        updatedTask['Progress %'] = progress;
+        updatedTask.Status = status.toLowerCase() === 'completed' ? 'Completed' : 'In Progress';
+        updatedTask.Blocker = normalizeString_(input.blockers) ? 'Yes' : updatedTask.Blocker;
+        updatedTask['Blocker Description'] = normalizeString_(input.blockers) || updatedTask['Blocker Description'];
+        updatedTask['Actual Hours'] =
+          normalizeNumber_(updatedTask['Actual Hours'], 0) + normalizeNumber_(input.hoursWorked, 0);
+        updatedTask['Updated Timestamp'] = now;
+        updatedTask['Updated By'] = authContext.user.userId;
+        if (updatedTask.Status === 'Completed') {
+          updatedTask['Completed Date'] = now;
+        }
+        applyTaskDerivedFields_(updatedTask);
+        updateSheetRecordByRow_(taskSheet, task.__rowNumber, taskSchema.columns, updatedTask);
+      } else {
+        recalculateTaskProgressFromSubtasks_(assignment['Task ID'], authContext.user);
       }
-      applyTaskDerivedFields_(updatedTask);
-      updateSheetRecordByRow_(taskSheet, task.__rowNumber, taskSchema.columns, updatedTask);
     }
 
     writeTaskHistory_(

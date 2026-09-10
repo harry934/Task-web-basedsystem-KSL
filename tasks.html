@@ -107,6 +107,10 @@
           <select id="taskTypeInput" class="select"></select>
         </div>
         <div class="field">
+          <label for="taskIdPreviewInput">Task UID</label>
+          <input id="taskIdPreviewInput" class="input" type="text" readonly>
+        </div>
+        <div class="field">
           <label for="taskParentInput">Parent task</label>
           <select id="taskParentInput" class="select"></select>
         </div>
@@ -120,7 +124,8 @@
         </div>
         <div class="field">
           <label for="taskProgressInput">Progress %</label>
-          <input id="taskProgressInput" class="input" type="number" min="0" max="100" value="0" required>
+          <input id="taskProgressInput" class="input" type="number" min="0" max="100" value="0" readonly>
+          <p class="page-note">Calculated from completed subtasks.</p>
         </div>
         <div class="field">
           <label for="taskStartDateInput">Start Date</label>
@@ -138,13 +143,9 @@
           <label for="taskActualHoursInput">Actual Hours</label>
           <input id="taskActualHoursInput" class="input" type="number" min="0" step="0.25" value="0">
         </div>
-        <div class="field">
-          <label for="taskPrimaryAssigneeInput">Primary Assignee ID</label>
-          <input id="taskPrimaryAssigneeInput" class="input" type="text">
-        </div>
-        <div class="field">
-          <label for="taskPrimaryAssigneeNameInput">Primary Assignee Name</label>
-          <input id="taskPrimaryAssigneeNameInput" class="input" type="text">
+        <div class="field full">
+          <label for="taskPrimaryAssigneeInput">Primary assignee</label>
+          <select id="taskPrimaryAssigneeInput" class="select"></select>
         </div>
         <div class="field">
           <label for="taskDelayReasonInput">Delay reason</label>
@@ -164,6 +165,12 @@
         <div class="field full">
           <label for="taskCompletionNotesInput">Completion Notes</label>
           <textarea id="taskCompletionNotesInput" class="textarea"></textarea>
+        </div>
+        <div class="field full">
+          <strong>Subtasks</strong>
+          <p class="page-note">Each completed subtask counts equally toward Progress %. Staff complete a subtask with a short summary and a PDF (max 2 MB).</p>
+          <div id="taskSubtasksList"></div>
+          <button id="addSubtaskButton" class="btn btn-outline" type="button">Add subtask</button>
         </div>
       </div>
       <div id="taskCollab" class="collab-panel hidden">
@@ -208,8 +215,11 @@
         categories: [],
         taskTypes: [],
         delayReasons: [],
-        parentTasks: []
-      }
+        parentTasks: [],
+        staff: []
+      },
+      draftSubtasks: [],
+      subtasksLoaded: true
     };
 
     function renderOptions(selectElement, values, placeholder, valueKey, labelKey) {
@@ -376,6 +386,7 @@
           'taskId',
           'taskTitle'
         );
+        KSL.fillStaffSelect('taskPrimaryAssigneeInput', state.metadata.staff || [], 'Select staff');
       });
     }
 
@@ -398,9 +409,94 @@
         });
     }
 
+    function updateProgressFromDraft() {
+      var total = state.draftSubtasks.length;
+      var completed = state.draftSubtasks.filter(function (item) {
+        return String(item.status || '').toLowerCase() === 'completed';
+      }).length;
+      document.getElementById('taskProgressInput').value = total ? Math.round((completed / total) * 100) : 0;
+    }
+
+    function canEditSubtask(item) {
+      return String((item && item.status) || '').toLowerCase() !== 'completed';
+    }
+
+    function renderSubtaskEditor() {
+      var list = document.getElementById('taskSubtasksList');
+      var staff = state.metadata.staff || [];
+      if (!state.draftSubtasks.length) {
+        list.innerHTML = '<p class="page-note">Add subtasks so progress can be calculated.</p>';
+        updateProgressFromDraft();
+        return;
+      }
+      list.innerHTML = state.draftSubtasks
+        .map(function (item, index) {
+          var locked = !canEditSubtask(item);
+          var options =
+            '<option value="">Assign staff</option>' +
+            staff
+              .map(function (person) {
+                var id = person.employeeId || '';
+                var selected = id && id === item.assignedStaffId ? ' selected' : '';
+                return (
+                  '<option value="' +
+                  KSL.escapeHtml(id) +
+                  '"' +
+                  selected +
+                  '>' +
+                  KSL.escapeHtml((person.fullName || id) + (id ? ' (' + id + ')' : '')) +
+                  '</option>'
+                );
+              })
+              .join('');
+          return (
+            '<div class="subtask-editor-row" data-index="' +
+            index +
+            '">' +
+            '<input class="input" data-field="title" type="text" placeholder="Subtask title" ' +
+            (locked ? 'readonly ' : '') +
+            'value="' +
+            KSL.escapeHtml(item.title || '') +
+            '">' +
+            '<select class="select" data-field="assignedStaffId"' +
+            (locked ? ' disabled' : '') +
+            '>' +
+            options +
+            '</select>' +
+            '<span class="page-note">' +
+            KSL.escapeHtml(item.status || 'Pending') +
+            '</span>' +
+            (locked
+              ? ''
+              : '<button class="btn btn-outline" type="button" data-remove-subtask="' +
+                index +
+                '">Remove</button>') +
+            '</div>'
+          );
+        })
+        .join('');
+      updateProgressFromDraft();
+    }
+
+    function syncDraftSubtasksFromForm() {
+      var rows = document.querySelectorAll('#taskSubtasksList .subtask-editor-row');
+      rows.forEach(function (row) {
+        var index = Number(row.getAttribute('data-index') || 0);
+        var item = state.draftSubtasks[index];
+        if (!item || !canEditSubtask(item)) {
+          return;
+        }
+        var titleInput = row.querySelector('[data-field="title"]');
+        var staffSelect = row.querySelector('[data-field="assignedStaffId"]');
+        item.title = titleInput ? titleInput.value.trim() : item.title;
+        item.assignedStaffId = staffSelect ? staffSelect.value : item.assignedStaffId;
+      });
+    }
+
     function resetTaskForm() {
       document.getElementById('taskForm').reset();
       document.getElementById('taskIdInput').value = '';
+      document.getElementById('taskIdPreviewInput').value = '';
       document.getElementById('taskModalTitle').textContent = 'Create Task';
       document.getElementById('taskProgressInput').value = 0;
       document.getElementById('taskEstimatedHoursInput').value = 0;
@@ -408,10 +504,17 @@
       document.getElementById('taskCollab').classList.add('hidden');
       document.getElementById('taskCommentsList').innerHTML = '';
       document.getElementById('taskAttachmentsList').innerHTML = '';
+      state.draftSubtasks = [];
+      state.subtasksLoaded = true;
+      KSL.fillStaffSelect('taskPrimaryAssigneeInput', state.metadata.staff || [], 'Select staff');
+      renderSubtaskEditor();
     }
 
     function openCreateModal() {
       resetTaskForm();
+      KSL.previewNextId('TSK').then(function (nextId) {
+        document.getElementById('taskIdPreviewInput').value = nextId || 'Generated on save';
+      });
       KSL.openModal('taskModalBackdrop');
     }
 
@@ -468,6 +571,7 @@
       }
       document.getElementById('taskModalTitle').textContent = 'Edit Task';
       document.getElementById('taskIdInput').value = task.taskId;
+      document.getElementById('taskIdPreviewInput').value = task.taskId;
       document.getElementById('taskTitleInput').value = task.taskTitle || '';
       document.getElementById('taskDescriptionInput').value = task.taskDescription || '';
       document.getElementById('taskDepartmentInput').value = task.department || '';
@@ -483,18 +587,45 @@
       document.getElementById('taskDueDateInput').value = KSL.toDateInput(task.dueDate);
       document.getElementById('taskEstimatedHoursInput').value = Number(task.estimatedHours || 0);
       document.getElementById('taskActualHoursInput').value = Number(task.actualHours || 0);
-      document.getElementById('taskPrimaryAssigneeInput').value = task.primaryAssignee || '';
-      document.getElementById('taskPrimaryAssigneeNameInput').value = task.primaryAssigneeName || '';
+      KSL.fillStaffSelect(
+        'taskPrimaryAssigneeInput',
+        state.metadata.staff || [],
+        'Select staff',
+        task.primaryAssignee || ''
+      );
       document.getElementById('taskDelayReasonInput').value = task.delayReason || '';
       document.getElementById('taskBlockerInput').value = task.blocker || '';
       document.getElementById('taskBlockerDescriptionInput').value = task.blockerDescription || '';
       document.getElementById('taskCompletionNotesInput').value = task.completionNotes || '';
+      state.draftSubtasks = [];
+      state.subtasksLoaded = false;
+      renderSubtaskEditor();
+      KSL.call('listTaskSubtasks', KSL.getSessionToken(), { taskId: task.taskId })
+        .then(function (response) {
+          state.draftSubtasks = ((response && response.data && response.data.items) || []).slice();
+          state.subtasksLoaded = true;
+          if (response && response.data && response.data.progress !== undefined) {
+            document.getElementById('taskProgressInput').value = Number(response.data.progress || 0);
+          }
+          renderSubtaskEditor();
+        })
+        .catch(function () {
+          state.draftSubtasks = [];
+          state.subtasksLoaded = true;
+          renderSubtaskEditor();
+        });
       loadCollaboration(task.taskId);
       KSL.openModal('taskModalBackdrop');
     }
 
     function collectTaskPayload() {
-      return {
+      syncDraftSubtasksFromForm();
+      var assigneeSelect = document.getElementById('taskPrimaryAssigneeInput');
+      var assigneeName =
+        assigneeSelect && assigneeSelect.selectedIndex > 0
+          ? assigneeSelect.options[assigneeSelect.selectedIndex].text
+          : '';
+      var payload = {
         taskId: document.getElementById('taskIdInput').value.trim(),
         taskTitle: document.getElementById('taskTitleInput').value.trim(),
         taskDescription: document.getElementById('taskDescriptionInput').value.trim(),
@@ -511,13 +642,28 @@
         dueDate: document.getElementById('taskDueDateInput').value,
         estimatedHours: Number(document.getElementById('taskEstimatedHoursInput').value || 0),
         actualHours: Number(document.getElementById('taskActualHoursInput').value || 0),
-        primaryAssignee: document.getElementById('taskPrimaryAssigneeInput').value.trim(),
-        primaryAssigneeName: document.getElementById('taskPrimaryAssigneeNameInput').value.trim(),
+        primaryAssignee: assigneeSelect ? assigneeSelect.value.trim() : '',
+        primaryAssigneeName: assigneeName,
         delayReason: document.getElementById('taskDelayReasonInput').value,
         blocker: document.getElementById('taskBlockerInput').value,
         blockerDescription: document.getElementById('taskBlockerDescriptionInput').value.trim(),
         completionNotes: document.getElementById('taskCompletionNotesInput').value.trim()
       };
+      if (!payload.taskId || state.subtasksLoaded) {
+        payload.subtasks = state.draftSubtasks
+          .map(function (item) {
+            return {
+              subtaskId: item.subtaskId || '',
+              title: item.title || '',
+              assignedStaffId: item.assignedStaffId || '',
+              status: item.status || 'Pending'
+            };
+          })
+          .filter(function (item) {
+            return Boolean(item.title);
+          });
+      }
+      return payload;
     }
 
     function submitTask(event) {
@@ -558,6 +704,42 @@
 
     function bindEvents() {
       document.getElementById('newTaskButton').addEventListener('click', openCreateModal);
+      document.getElementById('addSubtaskButton').addEventListener('click', function () {
+        syncDraftSubtasksFromForm();
+        state.draftSubtasks.push({
+          subtaskId: '',
+          title: '',
+          assignedStaffId: document.getElementById('taskPrimaryAssigneeInput').value || '',
+          status: 'Pending'
+        });
+        KSL.previewNextId('SUB').then(function (nextId) {
+          var last = state.draftSubtasks[state.draftSubtasks.length - 1];
+          if (last && !last.subtaskId) {
+            last.previewId = nextId;
+          }
+        });
+        renderSubtaskEditor();
+      });
+      document.getElementById('taskSubtasksList').addEventListener('click', function (event) {
+        var button = event.target.closest('[data-remove-subtask]');
+        if (!button) {
+          return;
+        }
+        syncDraftSubtasksFromForm();
+        var index = Number(button.getAttribute('data-remove-subtask') || -1);
+        if (index > -1) {
+          state.draftSubtasks.splice(index, 1);
+          renderSubtaskEditor();
+        }
+      });
+      document.getElementById('taskSubtasksList').addEventListener('input', function () {
+        syncDraftSubtasksFromForm();
+        updateProgressFromDraft();
+      });
+      document.getElementById('taskSubtasksList').addEventListener('change', function () {
+        syncDraftSubtasksFromForm();
+        updateProgressFromDraft();
+      });
       document.getElementById('tasksRefreshButton').addEventListener('click', function () {
         state.page = 1;
         loadTasks();

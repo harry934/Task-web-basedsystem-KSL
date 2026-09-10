@@ -6,7 +6,7 @@ function createUserAccount(sessionToken, payload) {
     var fullName = normalizeString_(input.fullName);
     var email = normalizeEmail_(input.email);
     var password = String(input.password || '');
-    var role = normalizeString_(input.role || 'Employee');
+    var role = normalizeStoredRole_(input.role || 'Staff');
     if (!username || !fullName || !password) {
       throw new Error('Username, full name and password are required.');
     }

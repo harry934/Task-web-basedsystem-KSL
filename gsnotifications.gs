@@ -2,7 +2,7 @@ function listNotifications(sessionToken, options) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'notifications'
     );
     var filters = options || {};
@@ -56,7 +56,7 @@ function markNotificationRead(sessionToken, payload) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'notifications'
     );
     var notificationId = normalizeString_(payload && payload.notificationId);
@@ -73,7 +73,7 @@ function markAllNotificationsRead(sessionToken) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'notifications'
     );
     return updateNotificationReadState_(authContext.user, null);

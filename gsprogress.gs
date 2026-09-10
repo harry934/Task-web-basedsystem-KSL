@@ -2,7 +2,7 @@ function listProgressUpdates(sessionToken, options) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'progress'
     );
     var filters = options || {};
@@ -11,7 +11,7 @@ function listProgressUpdates(sessionToken, options) {
     var page = normalizeNumber_(filters.page, 1);
     var pageSize = normalizeNumber_(filters.pageSize, 25);
     var employeeId = normalizeString_(authContext.user.employeeId);
-    var isEmployeeOnly = authContext.user.role === 'Employee';
+    var isEmployeeOnly = isStaffLikeRole_(authContext.user.role);
 
     var items = readSheetRecords_('TASK_UPDATES')
       .filter(function (record) {
@@ -50,7 +50,7 @@ function createProgressUpdate(sessionToken, payload) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'progress'
     );
     var input = payload || {};
@@ -64,7 +64,7 @@ function createProgressUpdate(sessionToken, payload) {
     }
     var employeeId = normalizeString_(input.employeeId || authContext.user.employeeId);
     if (!employeeId) {
-      throw new Error('Employee ID is required for a progress update.');
+      throw new Error('Staff UID is required for a progress update.');
     }
     var task = findTaskRecord_(taskId);
     if (!task) {
@@ -91,7 +91,7 @@ function createProgressUpdate(sessionToken, payload) {
         remarks: input.remarks
       });
     }
-    throw new Error('No active assignment was found for this task and employee.');
+    throw new Error('No active assignment was found for this task and staff member.');
   } catch (error) {
     return errorResponse_(error.message || 'Failed to submit progress update.');
   }

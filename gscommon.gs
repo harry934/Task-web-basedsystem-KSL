@@ -14,26 +14,91 @@ var KSL_OFFICIAL_LOGO_URL =
   'https://kenyashipyards.co.ke/wp-content/uploads/2022/06/cropped-KSL-High-quality-Logo-300x273.png';
 
 var PAGE_ROLE_ACCESS = {
-  dashboard: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
-  mytasks: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+  dashboard: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
+  mytasks: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
   tasks: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'],
   assignments: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'],
   employees: ['Administrator', 'Manager'],
   teams: ['Administrator', 'Manager'],
   departments: ['Administrator', 'Manager'],
-  progress: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+  progress: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
   monitoring: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'],
   dailyprogress: ['Administrator', 'Manager', 'Supervisor'],
   weeklyprogress: ['Administrator', 'Manager', 'Supervisor'],
   monthlyprogress: ['Administrator', 'Manager', 'Supervisor'],
   reports: ['Administrator', 'Manager', 'Supervisor'],
   performance: ['Administrator', 'Manager', 'Supervisor'],
-  notifications: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+  notifications: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
   audit: ['Administrator', 'Manager'],
   users: ['Administrator'],
   settings: ['Administrator'],
-  login: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee']
+  login: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff']
 };
+
+function isStaffLikeRole_(role) {
+  var value = normalizeString_(role);
+  return value === 'Employee' || value === 'Staff';
+}
+
+function normalizeStoredRole_(role) {
+  var value = normalizeString_(role);
+  if (value === 'Employee') {
+    return 'Staff';
+  }
+  return value || 'Staff';
+}
+
+function expandRolesWithStaffAlias_(roles) {
+  var list = Array.isArray(roles) ? roles.slice() : [];
+  var hasEmployee = list.indexOf('Employee') > -1;
+  var hasStaff = list.indexOf('Staff') > -1;
+  if (hasEmployee && !hasStaff) {
+    list.push('Staff');
+  }
+  if (hasStaff && !hasEmployee) {
+    list.push('Employee');
+  }
+  return list;
+}
+
+function roleIsAllowed_(role, allowedRoles) {
+  var expanded = expandRolesWithStaffAlias_(allowedRoles || []);
+  if (!expanded.length) {
+    return true;
+  }
+  var value = normalizeString_(role);
+  if (expanded.indexOf(value) > -1) {
+    return true;
+  }
+  return isStaffLikeRole_(value) && (expanded.indexOf('Employee') > -1 || expanded.indexOf('Staff') > -1);
+}
+
+function peekNextSequenceId_(prefix) {
+  var safePrefix = normalizeString_(prefix || 'ID').toUpperCase();
+  var properties = PropertiesService.getScriptProperties();
+  var current = normalizeNumber_(properties.getProperty('SEQ_' + safePrefix), 0);
+  var next = current + 1;
+  var datePart = Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyyyMMdd');
+  return safePrefix + '-' + datePart + '-' + String(next).padStart(5, '0');
+}
+
+function previewNextId(sessionToken, prefix) {
+  try {
+    requireSession_(sessionToken);
+    return successResponse_('Next ID ready.', { nextId: peekNextSequenceId_(prefix) });
+  } catch (error) {
+    return errorResponse_(error.message || 'Unable to preview ID.');
+  }
+}
+
+function listStaffOptions(sessionToken) {
+  try {
+    requireSession_(sessionToken);
+    return successResponse_('Staff options loaded.', { items: getAssignablePeople_() });
+  } catch (error) {
+    return errorResponse_(error.message || 'Unable to load staff options.');
+  }
+}
 
 function successResponse_(message, data) {
   return {
@@ -724,6 +789,7 @@ function mapUserRecordToSessionUser_(record) {
     username: normalizeString_(credential ? credential.Username : ''),
     fullName: normalizeString_(record['Full Name']),
     role: normalizeString_(record.Role),
+    displayRole: isStaffLikeRole_(record.Role) ? 'Staff' : normalizeString_(record.Role),
     accountStatus: normalizeString_(record['Account Status']),
     employeeId: normalizeString_(record['Employee ID']),
     department: normalizeString_(record.Department),
@@ -813,8 +879,8 @@ function requireSession_(sessionToken, allowedRoles, requestedPage, options) {
     throw new Error('Your account is not active. Contact an administrator.');
   }
 
-  var roles = Array.isArray(allowedRoles) ? allowedRoles : [];
-  if (roles.length > 0 && roles.indexOf(user.role) === -1) {
+  var roles = expandRolesWithStaffAlias_(Array.isArray(allowedRoles) ? allowedRoles : []);
+  if (roles.length > 0 && !roleIsAllowed_(user.role, roles)) {
     throw new Error('You do not have permission to perform this action.');
   }
 
@@ -852,7 +918,7 @@ function isRoleAllowedForPage_(role, page) {
   if (!allowedRoles) {
     return false;
   }
-  return allowedRoles.indexOf(normalizeString_(role)) > -1;
+  return roleIsAllowed_(role, allowedRoles);
 }
 
 function getSettingsMap_() {
@@ -1253,6 +1319,13 @@ function getAssignablePeople_() {
   } catch (error) {
     users = [];
   }
+  var credentialsByUserId = {};
+  try {
+    credentialsByUserId = getCredentialIndexByUserId_();
+  } catch (error) {
+    credentialsByUserId = {};
+  }
+
   users.forEach(function (record) {
     if (!isActiveAccountStatus_(record['Account Status'])) {
       return;
@@ -1260,12 +1333,14 @@ function getAssignablePeople_() {
     if (!normalizeString_(record['Employee ID'])) {
       return;
     }
+    var userId = normalizeString_(record['User ID']);
     addPerson({
       employeeId: normalizeString_(record['Employee ID']),
       fullName: normalizeString_(record['Full Name']),
       department: normalizeString_(record.Department),
       jobTitle: normalizeString_(record['Job Title']),
-      userId: normalizeString_(record['User ID']),
+      userId: userId,
+      username: credentialsByUserId[userId] ? credentialsByUserId[userId].username : '',
       email: normalizeEmail_(record['Google Email'])
     });
   });
@@ -1286,6 +1361,7 @@ function getAssignablePeople_() {
       department: normalizeString_(record.Department),
       jobTitle: normalizeString_(record['Job Title']),
       userId: '',
+      username: '',
       email: normalizeEmail_(record.Email)
     });
   });

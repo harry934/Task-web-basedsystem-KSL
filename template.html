@@ -20,7 +20,7 @@
     <?!= include('styles'); ?>
   </head>
   <body
-    class="<?= isLoginPage ? 'login-body' : '' ?>"
+    class="<?= isLoginPage ? 'login-body' : 'shell-locked' ?>"
     data-active-page="<?= activePage ?>"
     data-script-url="<?= scriptUrl ?>"
   >
@@ -38,6 +38,16 @@
     </div>
 
     <div id="appToastHost" class="toast-host"></div>
+
+    <? if (!isLoginPage) { ?>
+    <div id="accessGate" class="access-gate hidden">
+      <div class="access-gate-inner">
+        <h2 id="accessGateTitle">Access restricted</h2>
+        <p id="accessGateMessage"></p>
+        <button id="accessGateButton" class="btn btn-primary hidden" type="button">Sign in</button>
+      </div>
+    </div>
+    <? } ?>
 
     <? if (isLoginPage) { ?>
       <main class="login-page-container">

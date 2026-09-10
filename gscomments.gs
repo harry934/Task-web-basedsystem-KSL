@@ -2,7 +2,7 @@ function listTaskCollaboration(sessionToken, payload) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       payload && payload.page ? payload.page : 'tasks'
     );
     var taskId = normalizeString_(payload && payload.taskId);
@@ -53,7 +53,7 @@ function addTaskComment(sessionToken, payload) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'tasks'
     );
     var input = payload || {};
@@ -91,7 +91,7 @@ function uploadTaskAttachment(sessionToken, payload) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'tasks'
     );
     var input = payload || {};
@@ -179,7 +179,7 @@ function assertTaskVisible_(user, taskId) {
   var found = tasks.some(function (record) {
     return normalizeString_(record['Task ID']) === normalizeString_(taskId);
   });
-  if (!found && normalizeString_(user.role) === 'Employee') {
+  if (!found && isStaffLikeRole_(user.role)) {
     throw new Error('You are not authorized to access this task.');
   }
 }

@@ -6,15 +6,10 @@
   >
   <p class="login-kicker">Ministry of Defence</p>
   <h1>Kenya Shipyards Limited</h1>
-  <p>Sign in or register. New accounts wait for administrator approval.</p>
+  <p>Sign in with the username issued by an administrator. Staff accounts are created from User Management.</p>
 
   <div id="loginAlert" class="card hidden" style="margin-bottom: 14px; border-left: 4px solid #0ea5e9;">
     <span id="loginAlertText"></span>
-  </div>
-
-  <div class="auth-switch" role="tablist" aria-label="Authentication mode">
-    <button id="showLoginPanelButton" class="auth-switch-button active" type="button">Sign in</button>
-    <button id="showRegisterPanelButton" class="auth-switch-button" type="button">Sign up</button>
   </div>
 
   <div id="loginPanel" class="card auth-panel" style="margin-bottom: 12px; text-align: left;">
@@ -32,43 +27,6 @@
         <button id="loginSubmitButton" class="btn btn-primary auth-submit-button" type="submit">Sign in</button>
       </div>
     </form>
-    <p class="auth-alt-link">
-      New here?
-      <a href="#" id="openRegisterLink">Create an account</a>
-    </p>
-  </div>
-
-  <div id="registerPanel" class="card auth-panel hidden" style="text-align: left;">
-    <strong style="display: block; margin-bottom: 10px;">Register new account</strong>
-    <form id="passwordRegisterForm" class="form-grid">
-      <div class="field full">
-        <label for="registerFullNameInput">Full name</label>
-        <input id="registerFullNameInput" class="input" type="text" required>
-      </div>
-      <div class="field">
-        <label for="registerUsernameInput">Username</label>
-        <input id="registerUsernameInput" class="input" type="text" autocomplete="username" required>
-      </div>
-      <div class="field">
-        <label for="registerEmailInput">Work email (optional)</label>
-        <input id="registerEmailInput" class="input" type="email" autocomplete="email">
-      </div>
-      <div class="field">
-        <label for="registerPasswordInput">Password</label>
-        <input id="registerPasswordInput" class="input" type="password" autocomplete="new-password" required>
-      </div>
-      <div class="field">
-        <label for="registerConfirmPasswordInput">Confirm password</label>
-        <input id="registerConfirmPasswordInput" class="input" type="password" autocomplete="new-password" required>
-      </div>
-      <div class="field full">
-        <button id="registerSubmitButton" class="btn btn-secondary auth-submit-button" type="submit">Create account</button>
-      </div>
-    </form>
-    <p class="auth-alt-link">
-      Already registered?
-      <a href="#" id="openLoginLink">Back to login</a>
-    </p>
   </div>
 
   <div class="auth-extra-actions">
@@ -89,33 +47,11 @@
       alertBox.style.borderLeftColor = isError ? '#dc2626' : '#0ea5e9';
     }
 
-    function setAuthPanel(panelName) {
-      var loginPanel = document.getElementById('loginPanel');
-      var registerPanel = document.getElementById('registerPanel');
-      var loginButton = document.getElementById('showLoginPanelButton');
-      var registerButton = document.getElementById('showRegisterPanelButton');
-      var isRegister = panelName === 'register';
-
-      if (loginPanel) {
-        loginPanel.classList.toggle('hidden', isRegister);
-      }
-      if (registerPanel) {
-        registerPanel.classList.toggle('hidden', !isRegister);
-      }
-      if (loginButton) {
-        loginButton.classList.toggle('active', !isRegister);
-      }
-      if (registerButton) {
-        registerButton.classList.toggle('active', isRegister);
-      }
-    }
-
     function clearExistingSession(showMessage) {
       KSL.clearSessionToken();
       if (showMessage) {
         showLoginMessage('Session cleared. Please sign in again.', false);
       }
-      setAuthPanel('login');
     }
 
     function setFormBusy(form, button, isBusy, busyLabel, idleLabel) {
@@ -153,7 +89,7 @@
           if (responsePayload.requiresApproval) {
             KSL.hideProcessing();
             setFormBusy(loginForm, loginButton, false, 'Signing in...', 'Sign in');
-            showLoginMessage(result.message || 'Account is pending administrator approval.', false);
+            showLoginMessage(result.message || 'This account is not active. Contact an administrator.', false);
             return;
           }
 
@@ -176,53 +112,7 @@
         });
     }
 
-    function handleRegistration(event) {
-      event.preventDefault();
-      var registerForm = document.getElementById('passwordRegisterForm');
-      var registerButton = document.getElementById('registerSubmitButton');
-      var fullName = document.getElementById('registerFullNameInput').value.trim();
-      var username = document.getElementById('registerUsernameInput').value.trim();
-      var email = document.getElementById('registerEmailInput').value.trim();
-      var password = document.getElementById('registerPasswordInput').value;
-      var confirmPassword = document.getElementById('registerConfirmPasswordInput').value;
-      if (password !== confirmPassword) {
-        showLoginMessage('Password and confirmation do not match.', true);
-        return;
-      }
-
-      setFormBusy(registerForm, registerButton, true, 'Creating account...', 'Create account');
-      KSL.showProcessing('Creating account...');
-      KSL.call('registerWithPassword', {
-        fullName: fullName,
-        username: username,
-        email: email,
-        password: password,
-        confirmPassword: confirmPassword
-      })
-        .then(function (result) {
-          if (!result || !result.success) {
-            throw new Error((result && result.message) || 'Unable to complete registration.');
-          }
-          showLoginMessage(
-            result.message || 'Account registered successfully. Wait for administrator approval.',
-            false
-          );
-          document.getElementById('passwordRegisterForm').reset();
-          document.getElementById('loginUsernameInput').value = username;
-          setAuthPanel('login');
-        })
-        .catch(function (error) {
-          KSL.showToast(error.message || 'Registration failed.', 'error');
-          showLoginMessage(error.message || 'Registration failed.', true);
-        })
-        .finally(function () {
-          KSL.hideProcessing();
-          setFormBusy(registerForm, registerButton, false, 'Creating account...', 'Create account');
-        });
-    }
-
     function tryAutoRedirectForExistingSession() {
-      // Editor preview URLs cannot route app pages correctly.
       if (!KSL.getScriptUrl()) {
         return;
       }
@@ -257,41 +147,9 @@
     document.addEventListener('DOMContentLoaded', function () {
       tryAutoRedirectForExistingSession();
       var loginForm = document.getElementById('passwordLoginForm');
-      var registerForm = document.getElementById('passwordRegisterForm');
-      var showLoginButton = document.getElementById('showLoginPanelButton');
-      var showRegisterButton = document.getElementById('showRegisterPanelButton');
-      var openRegisterLink = document.getElementById('openRegisterLink');
-      var openLoginLink = document.getElementById('openLoginLink');
       var clearSessionButton = document.getElementById('clearSessionButton');
-
-      setAuthPanel('login');
       if (loginForm) {
         loginForm.addEventListener('submit', handleLogin);
-      }
-      if (registerForm) {
-        registerForm.addEventListener('submit', handleRegistration);
-      }
-      if (showLoginButton) {
-        showLoginButton.addEventListener('click', function () {
-          setAuthPanel('login');
-        });
-      }
-      if (showRegisterButton) {
-        showRegisterButton.addEventListener('click', function () {
-          setAuthPanel('register');
-        });
-      }
-      if (openRegisterLink) {
-        openRegisterLink.addEventListener('click', function (event) {
-          event.preventDefault();
-          setAuthPanel('register');
-        });
-      }
-      if (openLoginLink) {
-        openLoginLink.addEventListener('click', function (event) {
-          event.preventDefault();
-          setAuthPanel('login');
-        });
       }
       if (clearSessionButton) {
         clearSessionButton.addEventListener('click', function () {

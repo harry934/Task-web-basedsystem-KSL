@@ -1,98 +1,24 @@
-function registerWithPassword(payload) {
-  try {
-    var input = payload || {};
-    var username = normalizeUsername_(input.username);
-    var fullName = normalizeString_(input.fullName) || deriveNameFromUsername_(username);
-    var email = normalizeEmail_(input.email);
-    var password = String(input.password || '');
-    var confirmPassword = String(input.confirmPassword || '');
+function registerWithPassword() {
+  return errorResponse_('Self-registration is disabled. Ask an administrator to create your account.');
+}
 
-    if (!username) {
-      throw new Error('Username is required.');
-    }
-    if (!fullName) {
-      throw new Error('Full name is required.');
-    }
-    if (!password) {
-      throw new Error('Password is required.');
-    }
-    assertValidUsername_(username);
-    assertPasswordStrength_(password);
-    if (confirmPassword && confirmPassword !== password) {
-      throw new Error('Password and confirmation do not match.');
-    }
-
-    if (getUserCredentialRecordByUsername_(username)) {
-      throw new Error('Username is already in use.');
-    }
-
-    if (email && getUserRecordByEmail_(email)) {
-      throw new Error('A user with this email already exists.');
-    }
-
-    var schema = resolveSchema_('USERS');
-    var sheet = getSheetBySchema_(schema);
-    var now = new Date();
-    var names = splitNameParts_(fullName);
-    var userId = generateSequenceId_('USR');
-    var userRecord = {
-      'User ID': userId,
-      'Google Subject ID': '',
-      'Google Email': email,
-      'Email Verified': email ? 'FALSE' : '',
-      'Full Name': fullName,
-      'Given Name': names.givenName,
-      'Family Name': names.familyName,
-      'Profile Photo': '',
-      'Hosted Domain': '',
-      'Employee ID': '',
-      Department: '',
-      'Job Title': '',
-      Role: 'Employee',
-      'Supervisor ID': '',
-      'Account Status': 'Pending Approval',
-      'First Login': '',
-      'Last Login': '',
-      'Last Activity': '',
-      'Created By': username,
-      'Created Date': now,
-      'Updated By': username,
-      'Updated Date': now
-    };
-
-    applyEmployeeDirectoryToUser_(userRecord);
-    appendSheetRecord_(sheet, schema.columns, userRecord);
-    userRecord.__rowNumber = Math.max(getLastPopulatedRow_(sheet), 2);
-    setUserCredential_(userId, username, password, userId);
-
-    writeAuditLog_(
-      {
-        userId: userId,
-        fullName: fullName
-      },
-      'REGISTER',
-      'Authentication',
-      userId,
-      'Username/password account registered with pending approval.',
-      '',
-      {
-        username: username,
-        accountStatus: userRecord['Account Status']
-      }
-    );
-
-    return successResponse_('Registration submitted. Wait for administrator approval.', {
-      requiresApproval: true,
-      accountStatus: 'Pending Approval',
-      user: mapUserRecordToSessionUser_(userRecord)
-    });
-  } catch (error) {
-    return errorResponse_(error.message || 'Registration failed.');
+function assertLoginRateLimit_() {
+  var cache = CacheService.getScriptCache();
+  var count = normalizeNumber_(cache.get('GLOBAL_LOGIN_FAIL'), 0);
+  if (count >= 25) {
+    throw new Error('Too many sign-in attempts. Wait a few minutes and try again.');
   }
+}
+
+function bumpLoginFailure_() {
+  var cache = CacheService.getScriptCache();
+  var count = normalizeNumber_(cache.get('GLOBAL_LOGIN_FAIL'), 0) + 1;
+  cache.put('GLOBAL_LOGIN_FAIL', String(count), 300);
 }
 
 function loginWithPassword(payload) {
   try {
+    assertLoginRateLimit_();
     var input = payload || {};
     var username = normalizeUsername_(input.username);
     var password = String(input.password || '');
@@ -102,6 +28,7 @@ function loginWithPassword(payload) {
 
     var credential = getUserCredentialRecordByUsername_(username);
     if (!credential) {
+      bumpLoginFailure_();
       throw new Error('Invalid username or password.');
     }
     if (!isCredentialActive_(credential)) {
@@ -115,6 +42,7 @@ function loginWithPassword(payload) {
     }
 
     if (!verifyCredentialPassword_(credential, password)) {
+      bumpLoginFailure_();
       var failureState = registerCredentialFailedAttempt_(credential);
       if (failureState.locked) {
         throw new Error(
@@ -173,7 +101,7 @@ function loginWithPassword(payload) {
 function getAppBootstrap(sessionToken, activePage) {
   try {
     var pageName = normalizeString_(activePage || '').toLowerCase();
-    if (!PAGE_TEMPLATES[pageName]) {
+    if (!PAGE_TEMPLATES[pageName] || pageName === 'login') {
       pageName = 'dashboard';
     }
 
@@ -186,14 +114,14 @@ function getAppBootstrap(sessionToken, activePage) {
       DEFAULT_PAGE_SIZE: settings.DEFAULT_PAGE_SIZE,
       REQUIRE_ASSIGNMENT_ACCEPTANCE: settings.REQUIRE_ASSIGNMENT_ACCEPTANCE,
       REQUIRE_COMPLETION_NOTES: settings.REQUIRE_COMPLETION_NOTES,
-      ALLOW_COMPLETION_BELOW_100: settings.ALLOW_COMPLETION_BELOW_100
+      ALLOW_COMPLETION_BELOW_100: settings.ALLOW_COMPLETION_BELOW_100,
+      MAX_SUBTASK_PDF_MB: settings.MAX_SUBTASK_PDF_MB || '2'
     };
 
     return successResponse_('Bootstrap loaded.', {
       user: user,
       settings: compactSettings,
-      dimensions: getDimensionValuesMap_(),
-      unreadNotifications: getUnreadNotificationsCount_(user.userId),
+      unreadNotifications: getUnreadNotificationsCount_(user.userId, user.employeeId),
       allowedPages: getAllowedPagesForRole_(user.role)
     });
   } catch (error) {
@@ -284,8 +212,7 @@ function refreshUserLoginState_(userRecord) {
 }
 
 function getAllowedPagesForRole_(role) {
-  var normalizedRole = normalizeString_(role);
   return Object.keys(PAGE_ROLE_ACCESS).filter(function (page) {
-    return PAGE_ROLE_ACCESS[page].indexOf(normalizedRole) > -1;
+    return isRoleAllowedForPage_(role, page);
   });
 }

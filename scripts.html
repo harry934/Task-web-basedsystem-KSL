@@ -2,13 +2,56 @@
   (function () {
     var SESSION_KEY = 'kslSessionToken';
     var ROLE_KEY = 'kslUserRole';
-    var LOGO_KEY = 'kslLogoDataUri.v1';
+    var LOGO_KEY = 'kslLogoUrl.v2';
+    var DEFAULT_LOGO_URL =
+      'https://kenyashipyards.co.ke/wp-content/uploads/2022/06/cropped-KSL-High-quality-Logo-300x273.png';
     var KSL = (window.KSL = window.KSL || {});
+    function readStoredValue_(key) {
+      var sessionValue = '';
+      try {
+        sessionValue = sessionStorage.getItem(key) || '';
+      } catch (error) {
+        sessionValue = '';
+      }
+      if (sessionValue) {
+        return sessionValue;
+      }
+      try {
+        return localStorage.getItem(key) || '';
+      } catch (error) {
+        return '';
+      }
+    }
+    function writeStoredValue_(key, value) {
+      if (value) {
+        try {
+          sessionStorage.setItem(key, value);
+        } catch (error) {
+          // Ignore storage errors.
+        }
+        try {
+          localStorage.setItem(key, value);
+        } catch (error) {
+          // Ignore storage quota errors.
+        }
+        return;
+      }
+      try {
+        sessionStorage.removeItem(key);
+      } catch (error) {
+        // Ignore storage errors.
+      }
+      try {
+        localStorage.removeItem(key);
+      } catch (error) {
+        // Ignore storage errors.
+      }
+    }
     function readStoredToken_() {
-      return sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY) || '';
+      return readStoredValue_(SESSION_KEY);
     }
     function readStoredRole_() {
-      return localStorage.getItem(ROLE_KEY) || sessionStorage.getItem(ROLE_KEY) || '';
+      return readStoredValue_(ROLE_KEY);
     }
     KSL.state = KSL.state || {
       sessionToken: readStoredToken_(),
@@ -17,7 +60,7 @@
     };
 
     KSL.getActivePage = function () {
-      return document.body.dataset.activePage || 'dashboard';
+      return document.body.dataset.activePage || 'login';
     };
 
     KSL.getScriptUrl = function () {
@@ -58,13 +101,7 @@
       if (!token) {
         KSL.state.currentUser = null;
       }
-      if (token) {
-        sessionStorage.setItem(SESSION_KEY, token);
-        localStorage.setItem(SESSION_KEY, token);
-      } else {
-        sessionStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(SESSION_KEY);
-      }
+      writeStoredValue_(SESSION_KEY, token || '');
     };
 
     KSL.clearSessionToken = function () {
@@ -78,13 +115,7 @@
 
     KSL.setCachedRole = function (role) {
       var value = String(role || '').trim();
-      if (value) {
-        sessionStorage.setItem(ROLE_KEY, value);
-        localStorage.setItem(ROLE_KEY, value);
-      } else {
-        sessionStorage.removeItem(ROLE_KEY);
-        localStorage.removeItem(ROLE_KEY);
-      }
+      writeStoredValue_(ROLE_KEY, value);
     };
 
     KSL.showBootOverlay = function () {
@@ -107,36 +138,316 @@
       });
     };
 
-    KSL.loadLogo = function (fetchIfMissing) {
+    KSL.loadLogo = function () {
       var cached = '';
       try {
         cached = localStorage.getItem(LOGO_KEY) || '';
       } catch (error) {
         cached = '';
       }
-      if (cached.indexOf('data:image') === 0) {
-        KSL.applySharedLogo(cached);
-        return Promise.resolve(cached);
+      var src =
+        cached.indexOf('http') === 0 && cached.indexOf('data:') !== 0 ? cached : DEFAULT_LOGO_URL;
+      KSL.applySharedLogo(src);
+      try {
+        localStorage.setItem(LOGO_KEY, src);
+      } catch (error) {
+        // Ignore storage quota errors and still show the logo.
       }
-      if (!fetchIfMissing) {
-        return Promise.resolve('');
+      return Promise.resolve(src);
+    };
+
+    KSL.displayRole = function (role) {
+      var value = String(role || '').trim();
+      if (value === 'Employee' || value === 'Staff') {
+        return 'Staff';
       }
-      return KSL.runServer('getLogoDataUri')
-        .then(function (uri) {
-          if (!uri || String(uri).indexOf('data:image') !== 0) {
-            return '';
-          }
-          try {
-            localStorage.setItem(LOGO_KEY, uri);
-          } catch (error) {
-            // Ignore storage quota errors and still show the logo.
-          }
-          KSL.applySharedLogo(uri);
-          return uri;
+      return value || '-';
+    };
+
+    KSL.roleAllowed = function (role, allowedRoles) {
+      var list = Array.isArray(allowedRoles) ? allowedRoles : [];
+      if (!list.length) {
+        return true;
+      }
+      var value = String(role || '').trim();
+      if (list.indexOf(value) > -1) {
+        return true;
+      }
+      var isStaff = value === 'Employee' || value === 'Staff';
+      return isStaff && (list.indexOf('Employee') > -1 || list.indexOf('Staff') > -1);
+    };
+
+    KSL.fillStaffSelect = function (selectId, people, placeholder, selectedId) {
+      var select = document.getElementById(selectId);
+      if (!select) {
+        return;
+      }
+      var html = '<option value="">' + KSL.escapeHtml(placeholder || 'Select staff') + '</option>';
+      html += (people || [])
+        .map(function (person) {
+          var id = person.employeeId || person.staffId || '';
+          var label = (person.fullName || id) + (id ? ' (' + id + ')' : '');
+          var selected = selectedId && selectedId === id ? ' selected' : '';
+          return (
+            '<option value="' +
+            KSL.escapeHtml(id) +
+            '"' +
+            selected +
+            '>' +
+            KSL.escapeHtml(label) +
+            '</option>'
+          );
         })
-        .catch(function () {
-          return '';
-        });
+        .join('');
+      select.innerHTML = html;
+    };
+
+    KSL.previewNextId = function (prefix) {
+      return KSL.call('previewNextId', KSL.getSessionToken(), prefix).then(function (response) {
+        return (response && response.data && response.data.nextId) || '';
+      });
+    };
+
+    KSL.getUserRole = function () {
+      return KSL.getCachedRole();
+    };
+
+    KSL.isStaffLike = function (role) {
+      return KSL.roleAllowed(role || KSL.getUserRole(), ['Staff', 'Employee']);
+    };
+
+    KSL.canSearchStaffWork = function (role) {
+      return KSL.roleAllowed(role || KSL.getUserRole(), ['Administrator', 'Manager', 'Supervisor']);
+    };
+
+    KSL.progressBarHtml = function (percent) {
+      var value = Math.max(0, Math.min(100, Number(percent) || 0));
+      return (
+        '<div class="progress-meter"><div class="progress-bar"><span style="width:' +
+        value +
+        '%"></span></div><strong>' +
+        value +
+        '%</strong></div>'
+      );
+    };
+
+    KSL.renderSubtaskChecklist = function (subtasks) {
+      if (!subtasks || !subtasks.length) {
+        return '<p class="page-note">No subtasks yet. Progress stays at 0% until subtasks are added.</p>';
+      }
+      return (
+        '<ul class="subtask-list">' +
+        subtasks
+          .map(function (item) {
+            var done = String(item.status || '').toLowerCase() === 'completed';
+            var evidence = item.fileUrl
+              ? '<a href="' +
+                KSL.escapeHtml(item.fileUrl) +
+                '" target="_blank" rel="noopener">Evidence PDF</a>'
+              : '';
+            return (
+              '<li class="' +
+              (done ? 'is-done' : '') +
+              '"><span>' +
+              (done ? 'Completed · ' : 'Pending · ') +
+              KSL.escapeHtml(item.title || item.subtaskId) +
+              '</span><span>' +
+              KSL.escapeHtml(item.assignedStaffName || item.assignedStaffId || '') +
+              '</span>' +
+              (item.summary
+                ? '<span class="page-note">' + KSL.escapeHtml(item.summary) + '</span>'
+                : '') +
+              evidence +
+              '</li>'
+            );
+          })
+          .join('') +
+        '</ul>'
+      );
+    };
+
+    KSL.renderStaffWorkPanel = function (containerId, payload, emptyMessage) {
+      var el = document.getElementById(containerId);
+      if (!el) {
+        return;
+      }
+      var staff = payload && payload.staff;
+      var tasks = (payload && payload.tasks) || [];
+      if (!staff) {
+        el.innerHTML =
+          '<p class="page-note">' +
+          KSL.escapeHtml(emptyMessage || 'Search by name, username, or Staff UID.') +
+          '</p>';
+        return;
+      }
+      el.innerHTML =
+        '<div class="staff-work-head"><strong>' +
+        KSL.escapeHtml(staff.fullName || '-') +
+        '</strong> · ' +
+        KSL.escapeHtml(staff.staffId || '') +
+        (staff.department ? ' · ' + KSL.escapeHtml(staff.department) : '') +
+        '</div>' +
+        (tasks.length
+          ? tasks
+              .map(function (task) {
+                return (
+                  '<div class="staff-work-task"><div class="staff-work-task-head"><strong>' +
+                  KSL.escapeHtml(task.taskId) +
+                  '</strong> ' +
+                  KSL.escapeHtml(task.taskTitle || '') +
+                  KSL.progressBarHtml(task.progress) +
+                  '</div>' +
+                  KSL.renderSubtaskChecklist(task.subtasks) +
+                  '</div>'
+                );
+              })
+              .join('')
+          : '<p class="page-note">No tasks found for this staff member in your scope.</p>');
+    };
+
+    KSL.bindStaffWorkSearch = function (options) {
+      var opts = options || {};
+      var input = document.getElementById(opts.inputId);
+      var button = document.getElementById(opts.buttonId);
+      var resultsId = opts.resultsId;
+      if (!input || !resultsId) {
+        return;
+      }
+      function runSearch() {
+        var query = input.value.trim();
+        if (query.length < 2) {
+          KSL.renderStaffWorkPanel(
+            resultsId,
+            { staff: null, tasks: [] },
+            'Enter at least 2 characters (name, username, or Staff UID).'
+          );
+          return;
+        }
+        KSL.call('searchStaffWork', KSL.getSessionToken(), { query: query })
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Search failed.');
+            }
+            KSL.renderStaffWorkPanel(
+              resultsId,
+              response.data || {},
+              response.message || 'No matching staff found.'
+            );
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Search failed.', 'error');
+          });
+      }
+      if (button) {
+        button.addEventListener('click', runSearch);
+      }
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          runSearch();
+        }
+      });
+    };
+
+    KSL.readPdfEvidence = function (file) {
+      return new Promise(function (resolve, reject) {
+        if (!file) {
+          reject(new Error('A PDF file is required.'));
+          return;
+        }
+        var name = String(file.name || '');
+        var type = String(file.type || '').toLowerCase();
+        if (type !== 'application/pdf' && !/\.pdf$/i.test(name)) {
+          reject(new Error('Only PDF files are allowed.'));
+          return;
+        }
+        if (file.size < 1024) {
+          reject(new Error('The PDF is too small or empty.'));
+          return;
+        }
+        var maxMb = Math.max(1, Number((KSL.state.settings && KSL.state.settings.MAX_SUBTASK_PDF_MB) || 2));
+        var maxBytes = maxMb * 1024 * 1024;
+        if (file.size > maxBytes) {
+          reject(new Error('The PDF must be ' + maxMb + ' MB or smaller.'));
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function () {
+          var result = String(reader.result || '');
+          resolve({
+            fileName: name,
+            mimeType: 'application/pdf',
+            base64: result.indexOf(',') > -1 ? result.split(',')[1] : result
+          });
+        };
+        reader.onerror = function () {
+          reject(new Error('Could not read the PDF.'));
+        };
+        reader.readAsDataURL(file);
+      });
+    };
+
+    KSL.readOptionalPdfEvidence = function (fileInput) {
+      var file = fileInput && fileInput.files && fileInput.files[0];
+      if (!file) {
+        return Promise.resolve(null);
+      }
+      return KSL.readPdfEvidence(file);
+    };
+
+    KSL.applySubtaskProgressPanel = function (containerId, percentInputId, items, progress) {
+      var box = document.getElementById(containerId);
+      var percent = document.getElementById(percentInputId);
+      var list = Array.isArray(items) ? items : [];
+      var computed = Number(progress);
+      if (isNaN(computed)) {
+        var completed = list.filter(function (item) {
+          return String((item && item.status) || '').toLowerCase() === 'completed';
+        }).length;
+        computed = list.length ? Math.round((completed / list.length) * 100) : 0;
+      }
+      if (percent) {
+        percent.value = computed;
+        percent.readOnly = true;
+      }
+      if (!box) {
+        return;
+      }
+      if (!list.length) {
+        box.innerHTML =
+          '<p class="page-note">No subtasks on this task. Progress stays at 0% until subtasks are added.</p>';
+        return;
+      }
+      box.innerHTML =
+        '<ul class="subtask-progress-list">' +
+        list
+          .map(function (sub) {
+            var done = String((sub && sub.status) || '').toLowerCase() === 'completed';
+            return (
+              '<li class="subtask-mini"><span>' +
+              (done ? 'Completed' : 'Pending') +
+              '</span><span>' +
+              KSL.escapeHtml((sub && sub.title) || (sub && sub.subtaskId) || 'Subtask') +
+              '</span></li>'
+            );
+          })
+          .join('') +
+        '</ul>';
+    };
+
+    KSL.loadTaskSubtaskProgress = function (taskId, containerId, percentInputId) {
+      if (!taskId) {
+        KSL.applySubtaskProgressPanel(containerId, percentInputId, [], 0);
+        return Promise.resolve({ items: [], progress: 0 });
+      }
+      return KSL.call('listTaskSubtasks', KSL.getSessionToken(), { taskId: taskId }).then(function (response) {
+        if (!response || !response.success) {
+          throw new Error((response && response.message) || 'Failed to load subtasks.');
+        }
+        var data = response.data || {};
+        KSL.applySubtaskProgressPanel(containerId, percentInputId, data.items || [], Number(data.progress || 0));
+        return data;
+      });
     };
 
     KSL.renderSidebar = function (role) {
@@ -151,7 +462,7 @@
       var grouped = {};
       items.forEach(function (item) {
         var allowed = item.roles || [];
-        if (role && allowed.indexOf(role) === -1) {
+        if (role && !KSL.roleAllowed(role, allowed)) {
           return;
         }
         if (!role) {
@@ -340,6 +651,7 @@
       var badgeElement = document.getElementById('notificationBadge');
 
       KSL.state.currentUser = user;
+      KSL.state.settings = bootstrapData.settings || {};
       KSL.setCachedRole(role);
       KSL.renderSidebar(role);
 
@@ -347,7 +659,7 @@
         userNameElement.textContent = user.fullName || 'Unknown User';
       }
       if (userRoleElement) {
-        userRoleElement.textContent = role || '-';
+        userRoleElement.textContent = KSL.displayRole(role) || '-';
       }
       if (userAvatarElement) {
         userAvatarElement.src =
@@ -359,12 +671,47 @@
       }
 
       if (badgeElement) {
-        var unreadCount = Number(bootstrapData.unreadNotifications || 0);
-        badgeElement.textContent = String(unreadCount);
-        badgeElement.classList.toggle('hidden', unreadCount < 1);
+        KSL.setUnreadBadge(Number(bootstrapData.unreadNotifications || 0));
       }
 
+      KSL.hideAccessGate();
       KSL.hideBootOverlay();
+      KSL.startUnreadBadgePolling();
+    };
+
+    KSL.setUnreadBadge = function (count) {
+      var badgeElement = document.getElementById('notificationBadge');
+      if (!badgeElement) {
+        return;
+      }
+      var unreadCount = Math.max(0, Number(count || 0));
+      badgeElement.textContent = String(unreadCount);
+      badgeElement.classList.toggle('hidden', unreadCount < 1);
+    };
+
+    KSL.startUnreadBadgePolling = function () {
+      if (KSL._unreadBadgeTimer) {
+        return;
+      }
+      function refreshUnreadBadge() {
+        var token = KSL.getSessionToken();
+        if (!token || KSL.getActivePage() === 'login') {
+          return;
+        }
+        KSL.call('getUnreadNotificationCount', token)
+          .then(function (response) {
+            if (!response || !response.success) {
+              return;
+            }
+            var count = Number((response.data && response.data.count) || 0);
+            KSL.setUnreadBadge(count);
+          })
+          .catch(function () {
+            return null;
+          });
+      }
+      refreshUnreadBadge();
+      KSL._unreadBadgeTimer = window.setInterval(refreshUnreadBadge, 30000);
     };
 
     KSL.isAdministrator = function () {
@@ -379,11 +726,19 @@
       return KSL.initShell().then(function (bootstrapData) {
         if (Array.isArray(requiredRoles) && requiredRoles.length > 0) {
           var role = bootstrapData.user && bootstrapData.user.role;
-          if (!requiredRoles.includes(role)) {
-            KSL.showToast('You do not have access to this page.', 'error');
+          if (!KSL.roleAllowed(role, requiredRoles)) {
+            KSL.showAccessGate(
+              'You do not have permission to open this page.',
+              'Ask an administrator if you need access, or return to the dashboard.',
+              'Go to dashboard',
+              function () {
+                KSL.navigate('dashboard');
+              }
+            );
             throw new Error('Unauthorized role.');
           }
         }
+        KSL.hideAccessGate();
         if (typeof onReady === 'function') {
           onReady(bootstrapData);
         }
@@ -406,6 +761,48 @@
       );
     };
 
+    KSL.isForbiddenPageError = function (message) {
+      return /not authorized to access the requested page|do not have permission/i.test(String(message || ''));
+    };
+
+    KSL.showAccessGate = function (title, message, buttonLabel, onClick) {
+      var gate = document.getElementById('accessGate');
+      var titleEl = document.getElementById('accessGateTitle');
+      var messageEl = document.getElementById('accessGateMessage');
+      var button = document.getElementById('accessGateButton');
+      if (titleEl) {
+        titleEl.textContent = title || 'Access restricted';
+      }
+      if (messageEl) {
+        messageEl.textContent = message || '';
+      }
+      if (button) {
+        if (buttonLabel) {
+          button.textContent = buttonLabel;
+          button.classList.remove('hidden');
+          button.onclick = typeof onClick === 'function' ? onClick : function () {
+            KSL.redirectToLogin();
+          };
+        } else {
+          button.classList.add('hidden');
+        }
+      }
+      if (gate) {
+        gate.classList.remove('hidden');
+      }
+      document.body.classList.remove('shell-ready');
+      document.body.classList.add('shell-locked');
+    };
+
+    KSL.hideAccessGate = function () {
+      var gate = document.getElementById('accessGate');
+      if (gate) {
+        gate.classList.add('hidden');
+      }
+      document.body.classList.remove('shell-locked');
+      document.body.classList.add('shell-ready');
+    };
+
     KSL.initShell = function () {
       if (KSL.getActivePage() === 'login') {
         return Promise.resolve({ success: true });
@@ -420,7 +817,14 @@
         KSL.setSessionToken(token);
       }
       if (!token) {
-        KSL.redirectToLogin();
+        KSL.showAccessGate(
+          'Sign in required',
+          'You must sign in before opening this page. Guessing a URL does not grant access.',
+          'Sign in',
+          function () {
+            KSL.redirectToLogin();
+          }
+        );
         return Promise.reject(new Error('No active session.'));
       }
 
@@ -434,15 +838,38 @@
           return data;
         }).catch(function (error) {
           var message = error && error.message ? error.message : 'Unable to initialize session.';
-          if (attempt < 1 && !KSL.isInvalidSessionError(message)) {
+          if (attempt < 1 && !KSL.isInvalidSessionError(message) && !KSL.isForbiddenPageError(message)) {
             return loadBootstrap(attempt + 1);
           }
           if (KSL.isInvalidSessionError(message)) {
             KSL.clearSessionToken();
-            KSL.redirectToLogin();
+            KSL.showAccessGate(
+              'Sign in required',
+              'Your session expired or is not valid. Sign in again to continue.',
+              'Sign in',
+              function () {
+                KSL.redirectToLogin();
+              }
+            );
+          } else if (KSL.isForbiddenPageError(message)) {
+            KSL.showAccessGate(
+              'You do not have permission to open this page.',
+              'This area is restricted. Return to the dashboard or ask an administrator for access.',
+              'Go to dashboard',
+              function () {
+                KSL.navigate('dashboard');
+              }
+            );
           } else {
             KSL.hideBootOverlay();
-            KSL.showToast(message, 'error');
+            KSL.showAccessGate(
+              'Unable to load this page',
+              message,
+              'Try again',
+              function () {
+                window.location.reload();
+              }
+            );
           }
           throw error;
         });
@@ -578,7 +1005,7 @@
     });
 
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.loadLogo(KSL.getActivePage() === 'login');
+      KSL.loadLogo();
       var logoutButton = document.getElementById('logoutButton');
       if (logoutButton) {
         logoutButton.addEventListener('click', function () {
@@ -607,7 +1034,7 @@
         }
         KSL.initShell()
           .then(function () {
-            return KSL.loadLogo(true);
+            return KSL.loadLogo();
           })
           .catch(function () {
             return null;

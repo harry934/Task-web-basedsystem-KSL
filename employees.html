@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
-    <h1>Employees</h1>
-    <p>Add staff to the master list so they can be assigned tasks. This is separate from Google login accounts.</p>
+    <h1>Staff</h1>
+    <p>Add staff so they can be assigned tasks. Login accounts are created separately under Users.</p>
   </div>
 
   <div class="card">
@@ -9,7 +9,7 @@
       <div class="toolbar-left">
         <button id="newEmployeeButton" class="btn btn-primary" type="button">
           <i class="fa-solid fa-plus"></i>
-          New employee
+          New staff
         </button>
         <button id="employeesRefreshButton" class="btn btn-outline" type="button">Refresh</button>
         <button id="employeesRecalc" class="btn btn-outline" type="button">Recalculate metrics</button>
@@ -17,7 +17,7 @@
         <button id="employeesExportPdfButton" class="btn btn-outline" type="button">Export PDF</button>
       </div>
       <div class="toolbar-right">
-        <input id="employeesSearchInput" class="input" type="search" placeholder="Search name, ID, email..." style="min-width: 240px;">
+        <input id="employeesSearchInput" class="input" type="search" placeholder="Search name, Staff UID, email..." style="min-width: 240px;">
         <select id="employeesDepartmentFilter" class="select" style="min-width: 160px;">
           <option value="">All departments</option>
         </select>
@@ -35,7 +35,7 @@
     <table>
       <thead>
         <tr>
-          <th>Employee ID</th>
+          <th>Staff UID</th>
           <th>Name</th>
           <th>Department</th>
           <th>Job title</th>
@@ -45,7 +45,7 @@
         </tr>
       </thead>
       <tbody id="employeesTableBody">
-        <tr><td colspan="7" class="empty-state">Loading employees...</td></tr>
+        <tr><td colspan="7" class="empty-state">Loading staff...</td></tr>
       </tbody>
     </table>
   </div>
@@ -55,7 +55,7 @@
 <div id="employeeModalBackdrop" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3 id="employeeModalTitle">New employee</h3>
+      <h3 id="employeeModalTitle">New staff</h3>
       <button class="btn btn-outline" type="button" data-close-modal="employeeModalBackdrop">Close</button>
     </div>
     <form id="employeeForm">
@@ -66,8 +66,8 @@
           <input id="employeeFullNameInput" class="input" type="text" required>
         </div>
         <div class="field">
-          <label for="employeeNumberInput">Employee number</label>
-          <input id="employeeNumberInput" class="input" type="text" placeholder="Leave blank to auto-generate ID">
+          <label for="employeeNumberInput">Staff UID</label>
+          <input id="employeeNumberInput" class="input" type="text" readonly>
         </div>
         <div class="field">
           <label for="employeeEmailInput">Work email</label>
@@ -102,8 +102,8 @@
           <input id="employeeTeamInput" class="input" type="text">
         </div>
         <div class="field">
-          <label for="employeeSupervisorNameInput">Supervisor name</label>
-          <input id="employeeSupervisorNameInput" class="input" type="text">
+          <label for="employeeSupervisorIdInput">Supervisor</label>
+          <select id="employeeSupervisorIdInput" class="select"></select>
         </div>
         <div class="field">
           <label for="employeeDateJoinedInput">Date joined</label>
@@ -119,7 +119,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" type="button" data-close-modal="employeeModalBackdrop">Cancel</button>
-        <button class="btn btn-primary" type="submit">Save employee</button>
+        <button class="btn btn-primary" type="submit">Save staff</button>
       </div>
     </form>
   </div>
@@ -160,7 +160,7 @@
     function renderTable() {
       var body = document.getElementById('employeesTableBody');
       if (!state.items.length) {
-        body.innerHTML = '<tr><td colspan="7" class="empty-state">No employees yet. Click New employee.</td></tr>';
+        body.innerHTML = '<tr><td colspan="7" class="empty-state">No staff yet. Click New staff.</td></tr>';
         return;
       }
       body.innerHTML = state.items
@@ -246,15 +246,19 @@
           renderPagination();
         })
         .catch(function (error) {
-          KSL.showToast(error.message || 'Failed to load employees.', 'error');
+          KSL.showToast(error.message || 'Failed to load staff.', 'error');
         });
     }
 
     function openCreate() {
       document.getElementById('employeeForm').reset();
       document.getElementById('employeeIdInput').value = '';
-      document.getElementById('employeeModalTitle').textContent = 'New employee';
+      document.getElementById('employeeModalTitle').textContent = 'New staff';
       document.getElementById('employeeStatusInput').value = 'Active';
+      KSL.fillStaffSelect('employeeSupervisorIdInput', state.meta.staff || [], 'Select supervisor');
+      KSL.previewNextId('EMP').then(function (nextId) {
+        document.getElementById('employeeNumberInput').value = nextId || 'Generated on save';
+      });
       KSL.openModal('employeeModalBackdrop');
     }
 
@@ -263,13 +267,13 @@
         return row.employeeId === employeeId;
       });
       if (!item) {
-        KSL.showToast('Employee not found.', 'error');
+        KSL.showToast('Staff member not found.', 'error');
         return;
       }
-      document.getElementById('employeeModalTitle').textContent = 'Edit employee';
+      document.getElementById('employeeModalTitle').textContent = 'Edit staff';
       document.getElementById('employeeIdInput').value = item.employeeId;
       document.getElementById('employeeFullNameInput').value = item.fullName || '';
-      document.getElementById('employeeNumberInput').value = item.employeeNumber || '';
+      document.getElementById('employeeNumberInput').value = item.employeeId || item.employeeNumber || '';
       document.getElementById('employeeEmailInput').value = item.email || '';
       document.getElementById('employeePhoneInput').value = item.phone || '';
       document.getElementById('employeeDepartmentInput').value = item.department || '';
@@ -278,7 +282,12 @@
       document.getElementById('employeeLocationInput').value = item.workLocation || '';
       document.getElementById('employeeSectionInput').value = item.section || '';
       document.getElementById('employeeTeamInput').value = item.team || '';
-      document.getElementById('employeeSupervisorNameInput').value = item.supervisorName || '';
+      KSL.fillStaffSelect(
+        'employeeSupervisorIdInput',
+        state.meta.staff || [],
+        'Select supervisor',
+        item.supervisorId || ''
+      );
       document.getElementById('employeeStatusInput').value = item.employmentStatus || 'Active';
       if (item.dateJoined) {
         var date = new Date(item.dateJoined);
@@ -305,7 +314,11 @@
         workLocation: document.getElementById('employeeLocationInput').value,
         section: document.getElementById('employeeSectionInput').value,
         team: document.getElementById('employeeTeamInput').value.trim(),
-        supervisorName: document.getElementById('employeeSupervisorNameInput').value.trim(),
+        supervisorId: document.getElementById('employeeSupervisorIdInput').value,
+        supervisorName: (function () {
+          var select = document.getElementById('employeeSupervisorIdInput');
+          return select && select.selectedIndex > 0 ? select.options[select.selectedIndex].text : '';
+        })(),
         dateJoined: document.getElementById('employeeDateJoinedInput').value,
         employmentStatus: document.getElementById('employeeStatusInput').value
       };
@@ -322,6 +335,7 @@
             fillSelect('employeeTypeInput', state.meta.employmentTypes || [], 'Select type');
             fillSelect('employeeLocationInput', state.meta.workLocations || [], 'Select location');
             fillSelect('employeeSectionInput', state.meta.sections || [], 'Select section');
+            KSL.fillStaffSelect('employeeSupervisorIdInput', state.meta.staff || [], 'Select supervisor');
           })
           .catch(function () {
             return null;
@@ -416,7 +430,7 @@
                 if (!response || !response.success) {
                   throw new Error((response && response.message) || 'Delete failed.');
                 }
-                KSL.showToast('Employee deleted.', 'success');
+                KSL.showToast('Staff record deleted.', 'success');
                 loadEmployees();
               })
               .catch(function (error) {
@@ -424,7 +438,7 @@
               });
             return;
           }
-          if (!window.confirm('Deactivate this employee? They will no longer appear in assignment lists.')) {
+          if (!window.confirm('Deactivate this staff member? They will no longer appear in assignment lists.')) {
             return;
           }
           KSL.call('deactivateEmployee', KSL.getSessionToken(), { employeeId: id })
@@ -432,7 +446,7 @@
               if (!response || !response.success) {
                 throw new Error((response && response.message) || 'Deactivate failed.');
               }
-              KSL.showToast('Employee deactivated.', 'success');
+              KSL.showToast('Staff member deactivated.', 'success');
               loadEmployees();
             })
             .catch(function (error) {
@@ -448,7 +462,7 @@
               if (!response || !response.success) {
                 throw new Error((response && response.message) || 'Save failed.');
               }
-              KSL.showToast('Employee saved.', 'success');
+              KSL.showToast('Staff saved.', 'success');
               KSL.closeModal('employeeModalBackdrop');
               state.page = 1;
               loadEmployees();

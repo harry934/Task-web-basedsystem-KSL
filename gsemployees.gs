@@ -77,7 +77,7 @@ function getEmployeeFormMetadata(sessionToken) {
       jobTitles: dimensions['Job Titles'] || [],
       employmentTypes: dimensions['Employment Types'] || [],
       workLocations: dimensions['Work Locations'] || [],
-      sections: dimensions.Sections || []
+      staff: getAssignablePeople_()
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load employee form options.');
@@ -100,10 +100,7 @@ function createEmployee(sessionToken, payload) {
     var schema = resolveSchema_('EMPLOYEES');
     var sheet = getSheetBySchema_(schema);
     var existing = readSheetRecords_(schema);
-    var employeeId =
-      normalizeString_(input.employeeId) ||
-      normalizeString_(input.employeeNumber) ||
-      generateSequenceId_('EMP');
+    var employeeId = generateSequenceId_('EMP');
     var duplicate = existing.find(function (record) {
       return normalizeString_(record['Employee ID']) === employeeId;
     });
@@ -136,7 +133,10 @@ function createEmployee(sessionToken, payload) {
       'Job Title': normalizeString_(input.jobTitle),
       'Employment Type': normalizeString_(input.employmentType || 'Permanent'),
       'Supervisor ID': normalizeString_(input.supervisorId),
-      'Supervisor Name': normalizeString_(input.supervisorName),
+      'Supervisor Name': (function () {
+        var supervisor = findStaffPerson_(input.supervisorId);
+        return supervisor ? supervisor.fullName : normalizeString_(input.supervisorName);
+      })(),
       Team: normalizeString_(input.team),
       'Employment Status': normalizeString_(input.employmentStatus || 'Active'),
       'Date Joined': input.dateJoined ? safeDateFromInput_(input.dateJoined, 'Date Joined') : now,
@@ -224,7 +224,10 @@ function updateEmployee(sessionToken, payload) {
     updated['Job Title'] = normalizeString_(input.jobTitle);
     updated['Employment Type'] = normalizeString_(input.employmentType);
     updated['Supervisor ID'] = normalizeString_(input.supervisorId);
-    updated['Supervisor Name'] = normalizeString_(input.supervisorName);
+    updated['Supervisor Name'] = (function () {
+      var supervisor = findStaffPerson_(input.supervisorId);
+      return supervisor ? supervisor.fullName : normalizeString_(input.supervisorName);
+    })();
     updated.Team = normalizeString_(input.team);
     updated['Employment Status'] =
       normalizeString_(input.employmentStatus).toLowerCase() === 'inactive' ? 'Inactive' : 'Active';

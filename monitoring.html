@@ -17,6 +17,8 @@
         <button id="monitoringRefreshButton" class="btn btn-primary" type="button">Refresh</button>
       </div>
       <div class="toolbar-right">
+        <input id="monitoringStaffSearchInput" class="input" type="search" placeholder="Staff name, username, or UID" style="min-width: 220px;">
+        <button id="monitoringStaffSearchButton" class="btn btn-outline" type="button">Look up staff</button>
         <input id="monitoringSearchInput" class="input" type="search" placeholder="Search..." style="min-width: 180px;">
         <input id="monitoringDepartmentFilter" class="input" type="search" placeholder="Department" style="min-width: 140px;">
         <input id="monitoringTeamFilter" class="input" type="search" placeholder="Team" style="min-width: 130px;">
@@ -47,6 +49,11 @@
   </div>
   <div id="monitoringPagination" class="pagination"></div>
 </section>
+
+<div id="monitoringStaffWorkCard" class="card hidden">
+  <strong>Staff work</strong>
+  <div id="monitoringStaffWorkResults"></div>
+</div>
 
 <div id="monitoringDetailBackdrop" class="modal-backdrop hidden">
   <div class="modal">
@@ -169,7 +176,19 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader'], function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader'], function (bootstrap) {
+        var role = bootstrap && bootstrap.user && bootstrap.user.role;
+        if (KSL.canSearchStaffWork(role)) {
+          document.getElementById('monitoringStaffWorkCard').classList.remove('hidden');
+          KSL.bindStaffWorkSearch({
+            inputId: 'monitoringStaffSearchInput',
+            buttonId: 'monitoringStaffSearchButton',
+            resultsId: 'monitoringStaffWorkResults'
+          });
+        } else {
+          document.getElementById('monitoringStaffSearchInput').classList.add('hidden');
+          document.getElementById('monitoringStaffSearchButton').classList.add('hidden');
+        }
         document.querySelectorAll('.monitor-view').forEach(function (button) {
           button.addEventListener('click', function () {
             state.view = button.dataset.view || 'all';
@@ -215,6 +234,9 @@
                 '% · Assignee: ' +
                 KSL.escapeHtml(task.primaryAssigneeName || '-') +
                 '</p>' +
+                KSL.progressBarHtml(task.progress || 0) +
+                '<strong>Subtasks</strong>' +
+                KSL.renderSubtaskChecklist(data.subtasks || []) +
                 '<strong>Assignments</strong><ul class="collab-list">' +
                 ((data.assignments || [])
                   .map(function (item) {

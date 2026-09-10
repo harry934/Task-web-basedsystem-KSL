@@ -119,7 +119,8 @@ function getTaskFormMetadata(sessionToken) {
       delayReasons: dimensions['Delay Reasons'] || [],
       teams: teams.length ? teams : dimensions.Teams || [],
       departments: departments,
-      parentTasks: parentTasks
+      parentTasks: parentTasks,
+      staff: getAssignablePeople_()
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load task form metadata.');
@@ -139,7 +140,7 @@ function createTask(sessionToken, payload) {
     var taskId = generateSequenceId_('TSK');
     var startDate = safeDateFromInput_(input.startDate, 'Start Date');
     var dueDate = safeDateFromInput_(input.dueDate, 'Due Date');
-    var progress = normalizeNumber_(input.progress, 0);
+    var progress = 0;
     var estimatedHours = normalizeNumber_(input.estimatedHours, 0);
     var actualHours = normalizeNumber_(input.actualHours, 0);
     validateTaskDates_(startDate, dueDate);
@@ -148,11 +149,8 @@ function createTask(sessionToken, payload) {
     validateParentTask_(input.parentTaskId, '');
     validatePrimaryAssignee_(input.primaryAssignee);
 
+    var primaryPerson = findStaffPerson_(input.primaryAssignee);
     var normalizedStatus = normalizeString_(input.status || 'Assigned');
-    if (progress >= 100) {
-      normalizedStatus = 'Completed';
-    }
-    enforceTaskCompletionRules_(normalizedStatus, progress, input.completionNotes);
 
     var record = {
       'Task ID': taskId,
@@ -177,7 +175,9 @@ function createTask(sessionToken, payload) {
       'Actual Hours': actualHours,
       'Assigned By': authContext.user.userId,
       'Primary Assignee': normalizeString_(input.primaryAssignee),
-      'Primary Assignee Name': normalizeString_(input.primaryAssigneeName),
+      'Primary Assignee Name': primaryPerson
+        ? primaryPerson.fullName
+        : normalizeString_(input.primaryAssigneeName),
       'Supervisor ID': normalizeString_(input.supervisorId),
       'Supervisor Name': normalizeString_(input.supervisorName),
       'Number of Assignees': normalizeString_(input.primaryAssignee) ? 1 : 0,
@@ -203,6 +203,12 @@ function createTask(sessionToken, payload) {
     applyTaskDerivedFields_(record);
     enforceDelayAndBlockerRules_(record);
     appendSheetRecord_(sheet, schema.columns, record);
+    if (input.subtasks && input.subtasks.length) {
+      withScriptLock_(function () {
+        replaceTaskSubtasks_(taskId, input.subtasks, authContext.user);
+        recalculateTaskProgressFromSubtasks_(taskId, authContext.user);
+      });
+    }
     writeTaskHistory_(
       authContext.user,
       taskId,
@@ -267,7 +273,7 @@ function updateTask(sessionToken, payload) {
     var dueDate = input.dueDate ? safeDateFromInput_(input.dueDate, 'Due Date') : updated['Due Date'];
     validateTaskDates_(startDate, dueDate);
 
-    var progress = input.progress !== undefined && input.progress !== null ? normalizeNumber_(input.progress, 0) : normalizeNumber_(updated['Progress %'], 0);
+    var progress = normalizeNumber_(updated['Progress %'], 0);
     var estimatedHours =
       input.estimatedHours !== undefined && input.estimatedHours !== null
         ? normalizeNumber_(input.estimatedHours, 0)
@@ -304,9 +310,12 @@ function updateTask(sessionToken, payload) {
     }
     if (input.primaryAssignee !== undefined) {
       updated['Primary Assignee'] = normalizeString_(input.primaryAssignee);
-    }
-    if (input.primaryAssigneeName !== undefined) {
-      updated['Primary Assignee Name'] = normalizeString_(input.primaryAssigneeName);
+      var primaryPerson = findStaffPerson_(input.primaryAssignee);
+      if (primaryPerson) {
+        updated['Primary Assignee Name'] = primaryPerson.fullName;
+      } else if (input.primaryAssigneeName !== undefined) {
+        updated['Primary Assignee Name'] = normalizeString_(input.primaryAssigneeName);
+      }
     }
     if (input.supervisorId !== undefined) {
       updated['Supervisor ID'] = normalizeString_(input.supervisorId);
@@ -360,6 +369,14 @@ function updateTask(sessionToken, payload) {
     applyTaskDerivedFields_(updated);
     enforceDelayAndBlockerRules_(updated);
     updateSheetRecordByRow_(sheet, currentRecord.__rowNumber, schema.columns, updated);
+    if (input.subtasks) {
+      withScriptLock_(function () {
+        replaceTaskSubtasks_(taskId, input.subtasks, authContext.user);
+        progress = recalculateTaskProgressFromSubtasks_(taskId, authContext.user);
+      });
+    } else {
+      progress = recalculateTaskProgressFromSubtasks_(taskId, authContext.user);
+    }
     writeTaskHistory_(
       authContext.user,
       taskId,
@@ -708,7 +725,7 @@ function applyTaskScopeForUser_(taskRecords, user) {
     return [];
   }
   var role = normalizeString_(user.role);
-  if (role !== 'Employee') {
+  if (!isStaffLikeRole_(role)) {
     return safeRecords;
   }
   var employeeId = normalizeString_(user.employeeId);
@@ -769,13 +786,8 @@ function validatePrimaryAssignee_(employeeId) {
   if (!id) {
     return;
   }
-  var employee = safeReadSheetRecords_('EMPLOYEES').find(function (record) {
-    return normalizeString_(record['Employee ID']) === id;
-  });
-  if (!employee) {
-    throw new Error('Primary Assignee must refer to an active employee record.');
-  }
-  if (normalizeString_(employee['Employment Status'] || 'Active').toLowerCase() === 'inactive') {
-    throw new Error('Primary Assignee must refer to an active employee record.');
+  var person = findStaffPerson_(id);
+  if (!person) {
+    throw new Error('Primary assignee must be an active staff record.');
   }
 }

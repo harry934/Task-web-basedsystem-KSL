@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>User Management</h1>
-    <p>Login accounts for username/password access. Use Employees for assignment master-data and approve user access here.</p>
+    <p>Login accounts for staff. Create staff records first, then issue a username here.</p>
   </div>
 
   <div class="card">
@@ -97,8 +97,12 @@
           <select id="newUserRole" class="select" required></select>
         </div>
         <div class="field">
-          <label for="newUserEmployeeId">Employee ID</label>
-          <input id="newUserEmployeeId" class="input" type="text">
+          <label for="newUserIdPreview">User UID</label>
+          <input id="newUserIdPreview" class="input" type="text" readonly>
+        </div>
+        <div class="field">
+          <label for="newUserEmployeeId">Staff UID</label>
+          <select id="newUserEmployeeId" class="select"></select>
         </div>
         <div class="field">
           <label for="newUserDepartment">Department</label>
@@ -107,6 +111,10 @@
         <div class="field">
           <label for="newUserJobTitle">Job title</label>
           <input id="newUserJobTitle" class="input" type="text">
+        </div>
+        <div class="field">
+          <label for="newUserSupervisorId">Supervisor</label>
+          <select id="newUserSupervisorId" class="select"></select>
         </div>
         <div class="field">
           <label for="newUserStatus">Account status</label>
@@ -138,8 +146,8 @@
       <input id="approvalUserId" type="hidden">
       <div class="form-grid">
         <div class="field">
-          <label for="approvalEmployeeId">Employee ID</label>
-          <input id="approvalEmployeeId" class="input" type="text" required>
+          <label for="approvalEmployeeId">Staff UID</label>
+          <select id="approvalEmployeeId" class="select" required></select>
         </div>
         <div class="field">
           <label for="approvalDepartment">Department</label>
@@ -154,8 +162,8 @@
           <select id="approvalRole" class="select" required></select>
         </div>
         <div class="field">
-          <label for="approvalSupervisorId">Supervisor ID</label>
-          <input id="approvalSupervisorId" class="input" type="text">
+          <label for="approvalSupervisorId">Supervisor</label>
+          <select id="approvalSupervisorId" class="select"></select>
         </div>
       </div>
       <div class="modal-footer">
@@ -187,6 +195,33 @@
         page: state.page,
         pageSize: state.pageSize
       };
+    }
+
+    function staffRoleValues(roles) {
+      var seen = {};
+      return (roles || [])
+        .map(function (role) {
+          return role === 'Employee' ? 'Staff' : role;
+        })
+        .filter(function (role) {
+          if (!role || seen[role]) {
+            return false;
+          }
+          seen[role] = true;
+          return true;
+        });
+    }
+
+    function loadStaffSelects(selectedStaffId, selectedSupervisorId) {
+      return KSL.call('listStaffOptions', KSL.getSessionToken()).then(function (response) {
+        var people = (response && response.data && response.data.items) || [];
+        state.staff = people;
+        KSL.fillStaffSelect('newUserEmployeeId', people, 'Select staff', selectedStaffId || '');
+        KSL.fillStaffSelect('newUserSupervisorId', people, 'Select supervisor', selectedSupervisorId || '');
+        KSL.fillStaffSelect('approvalEmployeeId', people, 'Select staff', selectedStaffId || '');
+        KSL.fillStaffSelect('approvalSupervisorId', people, 'Select supervisor', selectedSupervisorId || '');
+        return people;
+      });
     }
 
     function renderDropdownOptions(selectId, values, placeholder) {
@@ -263,7 +298,7 @@
             KSL.escapeHtml(user.email) +
             '</td>' +
             '<td>' +
-            KSL.escapeHtml(user.role || '-') +
+            KSL.escapeHtml(KSL.displayRole(user.role) || '-') +
             '</td>' +
             '<td><span class="status-badge ' +
             statusClass +
@@ -363,12 +398,12 @@
         return;
       }
       document.getElementById('approvalUserId').value = selected.userId;
-      document.getElementById('approvalEmployeeId').value = selected.employeeId || '';
       document.getElementById('approvalDepartment').value = selected.department || '';
       document.getElementById('approvalJobTitle').value = selected.jobTitle || '';
-      document.getElementById('approvalSupervisorId').value = selected.supervisorId || '';
-      document.getElementById('approvalRole').value = selected.role || 'Employee';
-      KSL.openModal('userApprovalModalBackdrop');
+      document.getElementById('approvalRole').value = KSL.displayRole(selected.role || 'Staff');
+      loadStaffSelects(selected.employeeId || '', selected.supervisorId || '').then(function () {
+        KSL.openModal('userApprovalModalBackdrop');
+      });
     }
 
     function submitApproval(event) {
@@ -590,6 +625,11 @@
       document.getElementById('newUserButton').addEventListener('click', function () {
         document.getElementById('newUserForm').reset();
         document.getElementById('newUserStatus').value = 'Active';
+        document.getElementById('newUserRole').value = 'Staff';
+        loadStaffSelects('', '');
+        KSL.previewNextId('USR').then(function (nextId) {
+          document.getElementById('newUserIdPreview').value = nextId || 'Generated on save';
+        });
         KSL.openModal('newUserModalBackdrop');
       });
       document.getElementById('usersPendingButton').addEventListener('click', function () {
@@ -607,6 +647,7 @@
           password: document.getElementById('newUserPassword').value,
           role: document.getElementById('newUserRole').value,
           employeeId: document.getElementById('newUserEmployeeId').value.trim(),
+          supervisorId: document.getElementById('newUserSupervisorId').value.trim(),
           department: document.getElementById('newUserDepartment').value.trim(),
           jobTitle: document.getElementById('newUserJobTitle').value.trim(),
           accountStatus: document.getElementById('newUserStatus').value
@@ -636,10 +677,11 @@
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator'], function (context) {
         var dimensions = context.dimensions || {};
-        renderDropdownOptions('usersRoleFilter', dimensions.Roles || [], 'All roles');
+        renderDropdownOptions('usersRoleFilter', staffRoleValues(dimensions.Roles || []), 'All roles');
         renderDropdownOptions('usersStatusFilter', dimensions['Account Statuses'] || [], 'All statuses');
-        renderDropdownOptions('approvalRole', dimensions.Roles || ['Employee'], '');
-        renderDropdownOptions('newUserRole', dimensions.Roles || ['Employee'], '');
+        renderDropdownOptions('approvalRole', staffRoleValues(dimensions.Roles || ['Staff']), '');
+        renderDropdownOptions('newUserRole', staffRoleValues(dimensions.Roles || ['Staff']), '');
+        loadStaffSelects('', '');
         bindTableActions();
         bindFilters();
         document.addEventListener('click', function () {

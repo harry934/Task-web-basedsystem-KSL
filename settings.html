@@ -4,6 +4,18 @@
     <p>Configure application title, performance weights, workflow rules, and dimension values.</p>
   </div>
   <div class="card">
+    <strong>Security recommendations</strong>
+    <ul class="page-note" style="margin: 10px 0 0 18px;">
+      <li>Deploy the web app as Anyone in the organisation, not Anyone with the link.</li>
+      <li>Turn off ALLOWALL iframe embedding if you do not host this app in a custom frame.</li>
+      <li>Use a shorter session TTL (for example 1 hour) for administrator accounts.</li>
+      <li>Staff dashboards stay limited to their own tasks; staff lookup is admin-only.</li>
+      <li>Review the audit log for logins, user create, and attachment downloads.</li>
+      <li>Keep backups of the spreadsheet and the attachments Drive folder.</li>
+      <li>Do not put session tokens in URLs. Prefer long passphrases; a stronger password hash is needed if you leave Apps Script.</li>
+    </ul>
+  </div>
+  <div class="card">
     <div class="toolbar">
       <div class="toolbar-left">
         <button id="saveSettingsButton" class="btn btn-primary" type="button">Save Settings</button>

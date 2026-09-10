@@ -37,6 +37,39 @@
     overflow: hidden;
   }
 
+  body.shell-locked .app-shell {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .access-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--white);
+    padding: 24px;
+  }
+
+  .access-gate-inner {
+    text-align: center;
+    max-width: 420px;
+  }
+
+  .access-gate-inner h2 {
+    margin: 16px 0 8px;
+    color: var(--navy);
+    font-size: 20px;
+  }
+
+  .access-gate-inner p {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
   *::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -1029,6 +1062,81 @@
     display: block;
     height: 100%;
     background: var(--success);
+  }
+
+  .progress-meter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .progress-meter .progress-bar {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .subtask-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+  }
+
+  .subtask-list li {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 8px;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+  }
+
+  .subtask-list li.is-done {
+    color: var(--muted);
+  }
+
+  .subtask-editor-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1.2fr auto auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .staff-work-head {
+    margin-bottom: 12px;
+  }
+
+  .staff-work-task {
+    border-top: 1px solid var(--line);
+    padding: 12px 0;
+  }
+
+  .staff-work-task-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .staff-work-task-head .progress-meter {
+    min-width: 180px;
+    margin-left: auto;
+  }
+
+  .subtask-mini {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+    font-size: 13px;
+  }
+
+  @media (max-width: 720px) {
+    .subtask-editor-row,
+    .subtask-list li {
+      grid-template-columns: 1fr;
+    }
   }
 
   .report-preview {

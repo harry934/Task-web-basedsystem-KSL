@@ -2,7 +2,7 @@ function getDashboardSummary(sessionToken, options) {
   try {
     var authContext = requireSession_(
       sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'dashboard',
       { skipActivity: true }
     );

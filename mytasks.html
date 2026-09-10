@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>My Tasks</h1>
-    <p>Accept assignments and submit progress on your work.</p>
+    <p>Accept assignments, complete subtasks with a PDF, and submit notes on your work.</p>
   </div>
 
   <div class="card">
@@ -28,11 +28,12 @@
           <th>Status</th>
           <th>Progress</th>
           <th>Due</th>
+          <th>Subtasks</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="myTasksTableBody">
-        <tr><td colspan="7" class="empty-state">Loading...</td></tr>
+        <tr><td colspan="8" class="empty-state">Loading...</td></tr>
       </tbody>
     </table>
   </div>
@@ -101,6 +102,36 @@
   </div>
 </div>
 
+<div id="completeSubtaskBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Complete subtask</h3>
+      <button class="btn btn-outline" type="button" data-close-modal="completeSubtaskBackdrop">Close</button>
+    </div>
+    <form id="completeSubtaskForm">
+      <input id="completeSubtaskId" type="hidden">
+      <div class="form-grid">
+        <div class="field full">
+          <label>Subtask</label>
+          <input id="completeSubtaskTitle" class="input" type="text" readonly>
+        </div>
+        <div class="field full">
+          <label for="completeSubtaskSummary">Short summary</label>
+          <textarea id="completeSubtaskSummary" class="textarea" required placeholder="What was completed?"></textarea>
+        </div>
+        <div class="field full">
+          <label for="completeSubtaskPdf">Evidence PDF (required, max 2 MB)</label>
+          <input id="completeSubtaskPdf" class="input" type="file" accept="application/pdf,.pdf" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" data-close-modal="completeSubtaskBackdrop">Cancel</button>
+        <button class="btn btn-primary" type="submit">Complete subtask</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
   (function () {
     var state = { items: [], page: 1, pages: 1, pageSize: 25, view: 'all' };
@@ -117,7 +148,7 @@
     function renderRows() {
       var body = document.getElementById('myTasksTableBody');
       if (!state.items.length) {
-        body.innerHTML = '<tr><td colspan="7" class="empty-state">No assigned tasks yet.</td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="empty-state">No assigned tasks yet.</td></tr>';
         return;
       }
       body.innerHTML = state.items
@@ -136,6 +167,29 @@
             '<button class="btn btn-outline" type="button" data-action="progress" data-id="' +
             KSL.escapeHtml(item.assignmentId) +
             '">Update</button>';
+          var subtasksHtml = (item.subtasks || [])
+            .map(function (sub) {
+              var done = String(sub.status || '').toLowerCase() === 'completed';
+              var action = done
+                ? sub.fileUrl
+                  ? '<a href="' +
+                    KSL.escapeHtml(sub.fileUrl) +
+                    '" target="_blank" rel="noopener">PDF</a>'
+                  : 'Done'
+                : '<button class="btn btn-secondary" type="button" data-action="complete-sub" data-subtask="' +
+                  KSL.escapeHtml(sub.subtaskId) +
+                  '" data-title="' +
+                  KSL.escapeHtml(sub.title || sub.subtaskId) +
+                  '">Complete</button>';
+              return (
+                '<div class="subtask-mini"><span>' +
+                KSL.escapeHtml(sub.title || sub.subtaskId) +
+                '</span>' +
+                action +
+                '</div>'
+              );
+            })
+            .join('') || '<span class="page-note">No subtasks</span>';
           return (
             '<tr><td>' +
             KSL.escapeHtml(item.taskId) +
@@ -146,9 +200,11 @@
             '</td><td>' +
             KSL.escapeHtml(item.employeeStatus) +
             '</td><td>' +
-            KSL.escapeHtml(String(item.employeeProgress || 0) + '%') +
+            KSL.progressBarHtml(item.progress || item.employeeProgress || 0) +
             '</td><td>' +
             KSL.escapeHtml(KSL.formatDate(item.dueDate) || '-') +
+            '</td><td>' +
+            subtasksHtml +
             '</td><td><div class="toolbar-left">' +
             actions +
             '</div></td></tr>'
@@ -214,6 +270,13 @@
       document.getElementById('myAssignmentId').value = select.value;
     }
 
+    function openCompleteSubtask(subtaskId, title) {
+      document.getElementById('completeSubtaskForm').reset();
+      document.getElementById('completeSubtaskId').value = subtaskId || '';
+      document.getElementById('completeSubtaskTitle').value = title || subtaskId || '';
+      KSL.openModal('completeSubtaskBackdrop');
+    }
+
     function openProgressModal(assignmentId) {
       if (!state.items.length) {
         KSL.showToast('No assignment available for update.', 'error');
@@ -251,7 +314,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'], function () {
         document.getElementById('myTasksNewUpdateButton').addEventListener('click', function () {
           openProgressModal('');
         });
@@ -279,6 +342,10 @@
           var id = button.dataset.id || '';
           if (button.dataset.action === 'progress') {
             openProgressModal(id);
+            return;
+          }
+          if (button.dataset.action === 'complete-sub') {
+            openCompleteSubtask(button.dataset.subtask || '', button.dataset.title || '');
             return;
           }
           KSL.call('respondToAssignment', KSL.getSessionToken(), {
@@ -331,6 +398,43 @@
             })
             .catch(function (error) {
               KSL.showToast(error.message || 'Submit failed.', 'error');
+            });
+        });
+        document.getElementById('completeSubtaskForm').addEventListener('submit', function (event) {
+          event.preventDefault();
+          var subtaskId = document.getElementById('completeSubtaskId').value.trim();
+          var summary = document.getElementById('completeSubtaskSummary').value.trim();
+          var fileInput = document.getElementById('completeSubtaskPdf');
+          var file = fileInput.files && fileInput.files[0];
+          if (!subtaskId) {
+            KSL.showToast('Subtask is missing.', 'error');
+            return;
+          }
+          if (!summary) {
+            KSL.showToast('A short summary is required.', 'error');
+            return;
+          }
+          KSL.readPdfEvidence(file)
+            .then(function (pdf) {
+              return KSL.callBusy('completeSubtask', KSL.getSessionToken(), {
+                subtaskId: subtaskId,
+                summary: summary,
+                fileName: pdf.fileName,
+                mimeType: pdf.mimeType,
+                base64: pdf.base64
+              });
+            })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to complete subtask.');
+              }
+              KSL.showToast('Subtask completed.', 'success');
+              KSL.closeModal('completeSubtaskBackdrop');
+              state.page = 1;
+              loadMyTasks();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to complete subtask.', 'error');
             });
         });
         loadMyTasks();

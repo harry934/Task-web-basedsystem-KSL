@@ -254,7 +254,12 @@ var KSL_SLICE1_SCHEMAS = {
       'Supervisor Review',
       'Supervisor Comment',
       'Supervisor Review Date',
-      'Created Timestamp'
+      'Created Timestamp',
+      'File Name',
+      'File URL',
+      'File ID',
+      'MIME Type',
+      'File Size'
     ]
   },
   TASK_HISTORY: {
@@ -345,6 +350,31 @@ var KSL_SLICE1_SCHEMAS = {
       'Uploaded Date',
       'Uploaded By',
       'Status'
+    ]
+  },
+  TASK_SUBTASKS: {
+    key: 'TASK_SUBTASKS',
+    sheetName: 'TaskSubtasks',
+    rangeName: 'RANGETASKSUBTASKS',
+    columns: [
+      'Subtask ID',
+      'Task ID',
+      'Title',
+      'Status',
+      'Assigned Staff ID',
+      'Assigned Staff Name',
+      'Summary',
+      'File Name',
+      'File URL',
+      'File ID',
+      'MIME Type',
+      'File Size',
+      'Completed Date',
+      'Created Date',
+      'Created By',
+      'Updated Date',
+      'Updated By',
+      'Record Status'
     ]
   },
   DAILY_PROGRESS: {
@@ -518,8 +548,13 @@ function ensureHeaders_(sheet, headers) {
   }
 
   var mismatches = [];
+  var needsWrite = existing.length < headers.length;
   headers.forEach(function (expected, index) {
     var actual = String(existing[index] || '').trim();
+    if (!actual) {
+      needsWrite = true;
+      return;
+    }
     if (actual !== expected) {
       mismatches.push({
         column: index + 1,
@@ -536,6 +571,9 @@ function ensureHeaders_(sheet, headers) {
         '". Fix columns before continuing: ' +
         JSON.stringify(mismatches)
     );
+  }
+  if (needsWrite) {
+    headerRange.setValues([headers]);
   }
 }
 
@@ -775,6 +813,7 @@ function getPerformanceSettingSeedRows_(updatedDate, updatedBy) {
     ['DEFAULT_PAGE_SIZE', '25', 'Interface', 'Number', 'Default pagination page size.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['REPORT_ORG_NAME', 'Kenya Shipyards Limited', 'Reports', 'Text', 'Organization name used on printed and PDF reports.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['MAX_ATTACHMENT_MB', '8', 'Workflow', 'Number', 'Maximum attachment size in megabytes.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['MAX_SUBTASK_PDF_MB', '2', 'Workflow', 'Number', 'Maximum PDF size in megabytes for subtask evidence.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['REQUIRE_DELAY_REASON', 'TRUE', 'Workflow', 'Boolean', 'Require a delay reason when a task is delayed or overdue.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['REQUIRE_BLOCKER_DESCRIPTION', 'TRUE', 'Workflow', 'Boolean', 'Require a blocker description when a task is blocked.', 'TRUE', 'Active', updatedDate, updatedBy]
   ];
@@ -817,7 +856,7 @@ function getDimensionSeedMap_() {
     'Employment Types': ['Permanent', 'Contract', 'Intern'],
     'Performance Ratings': ['Excellent', 'Good', 'Satisfactory', 'Needs Improvement'],
     'Notification Types': ['Assignment', 'Due Soon', 'Overdue', 'Progress Review', 'Account'],
-    Roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+    Roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff'],
     'Account Statuses': ['Pending Approval', 'Active', 'Suspended', 'Disabled']
   };
 }
