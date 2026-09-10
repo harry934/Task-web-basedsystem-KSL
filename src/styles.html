@@ -737,6 +737,11 @@
     margin-top: 16px;
   }
 
+  body.login-body .processing-overlay,
+  body.login-body .app-progress-bar {
+    display: none !important;
+  }
+
   .processing-overlay {
     position: fixed;
     inset: 0;
@@ -930,7 +935,10 @@
   .auth-submit-button {
     width: 100%;
     min-width: 0;
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
+    gap: 8px;
     border-radius: 2px;
     padding: 10px 14px;
     font-size: 14px;

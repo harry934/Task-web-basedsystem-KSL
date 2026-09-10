@@ -753,6 +753,9 @@
     };
 
     KSL.showProcessing = function (message) {
+      if (document.body.classList.contains('login-body')) {
+        return;
+      }
       var overlay = document.getElementById('appProcessingOverlay');
       var text = document.getElementById('appProcessingMessage');
       if (text) {
@@ -800,6 +803,9 @@
 
     KSL.beginRequest = function () {
       KSL._inflight += 1;
+      if (document.body.classList.contains('login-body')) {
+        return;
+      }
       var bar = document.getElementById('appProgressBar');
       if (bar) {
         bar.classList.remove('hidden');
@@ -1741,6 +1747,9 @@
     document.addEventListener(
       'click',
       function (event) {
+        if (document.body.classList.contains('login-body')) {
+          return;
+        }
         var btn = event.target.closest('.btn, .action-menu-item');
         if (btn && !btn.disabled && !btn.classList.contains('password-toggle')) {
           KSL._pendingBusyButton = btn;

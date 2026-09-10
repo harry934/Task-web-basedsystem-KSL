@@ -57,6 +57,8 @@
     function setFormBusy(form, button, isBusy, busyLabel, idleLabel) {
       if (button) {
         button.disabled = isBusy;
+        button.classList.toggle('is-busy', Boolean(isBusy));
+        button.setAttribute('aria-busy', isBusy ? 'true' : 'false');
         button.textContent = isBusy ? busyLabel : idleLabel;
       }
       if (!form) {
@@ -78,7 +80,7 @@
         password: document.getElementById('loginPasswordInput').value
       };
       setFormBusy(loginForm, loginButton, true, 'Signing in...', 'Sign in');
-      KSL.call('loginWithPassword', loginPayload)
+      KSL.call('loginWithPassword', loginPayload, { silent: true })
         .then(function (result) {
           if (!result || !result.success) {
             throw new Error((result && result.message) || 'Unable to complete login.');
@@ -120,7 +122,7 @@
       if (!existingToken) {
         return;
       }
-      KSL.call('getAppBootstrap', existingToken, 'dashboard')
+      KSL.call('getAppBootstrap', existingToken, 'dashboard', { silent: true })
         .then(function (result) {
           if (result && result.success) {
             if (result.data && result.data.user && result.data.user.role) {
