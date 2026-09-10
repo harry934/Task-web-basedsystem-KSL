@@ -90,7 +90,6 @@ function doGet(e) {
   template.scriptUrl = getScriptUrl();
   template.navItems = NAV_ITEMS;
   template.navGroups = buildNavGroups_(NAV_ITEMS);
-  template.logoUrl = KSL_OFFICIAL_LOGO_URL;
 
   return template
     .evaluate()

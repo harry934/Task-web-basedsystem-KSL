@@ -4,10 +4,67 @@
     <p>Review employee progress submissions. Updates are kept as history and are not overwritten.</p>
   </div>
 
+  <div class="card" id="progressCreateForm">
+    <strong>Create progress update</strong>
+    <form id="progressCreateFormElement" class="form-grid" style="margin-top: 10px;">
+      <div class="field">
+        <label for="progressTaskIdInput">Task ID</label>
+        <input id="progressTaskIdInput" class="input" type="text" required>
+      </div>
+      <div class="field">
+        <label for="progressEmployeeIdInput">Employee ID</label>
+        <input id="progressEmployeeIdInput" class="input" type="text" placeholder="Defaults to your employee ID">
+      </div>
+      <div class="field">
+        <label for="progressValueInput">Progress %</label>
+        <input id="progressValueInput" class="input" type="number" min="0" max="100" required>
+      </div>
+      <div class="field">
+        <label for="progressStatusInput">Status</label>
+        <select id="progressStatusInput" class="select">
+          <option value="In Progress">In Progress</option>
+          <option value="Blocked">Blocked</option>
+          <option value="Completed">Completed</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="progressHoursInput">Hours worked</label>
+        <input id="progressHoursInput" class="input" type="number" min="0" step="0.25" value="0">
+      </div>
+      <div class="field full">
+        <label for="progressWorkCompletedInput">Work completed</label>
+        <textarea id="progressWorkCompletedInput" class="textarea"></textarea>
+      </div>
+      <div class="field full">
+        <label for="progressWorkRemainingInput">Work remaining</label>
+        <textarea id="progressWorkRemainingInput" class="textarea"></textarea>
+      </div>
+      <div class="field full">
+        <label for="progressChallengesInput">Challenges</label>
+        <textarea id="progressChallengesInput" class="textarea"></textarea>
+      </div>
+      <div class="field full">
+        <label for="progressNextActionInput">Next action</label>
+        <textarea id="progressNextActionInput" class="textarea"></textarea>
+      </div>
+      <div class="field full">
+        <label for="progressBlockersInput">Blockers</label>
+        <textarea id="progressBlockersInput" class="textarea"></textarea>
+      </div>
+      <div class="field full">
+        <label for="progressRemarksInput">Remarks</label>
+        <textarea id="progressRemarksInput" class="textarea"></textarea>
+      </div>
+      <div class="field full">
+        <button class="btn btn-primary" type="submit">Submit update</button>
+      </div>
+    </form>
+  </div>
+
   <div class="card">
     <div class="toolbar">
       <div class="toolbar-left">
-        <button id="progressNewUpdateButton" class="btn btn-outline" type="button">New progress update</button>
+        <button id="progressNewUpdateButton" class="btn btn-outline" type="button">Focus create form</button>
         <button id="progressPendingButton" class="btn btn-outline" type="button">Pending review</button>
         <button id="progressRefreshButton" class="btn btn-primary" type="button">Refresh</button>
       </div>
@@ -149,7 +206,36 @@
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
         document.getElementById('progressNewUpdateButton').addEventListener('click', function () {
-          KSL.navigate('mytasks');
+          document.getElementById('progressTaskIdInput').focus();
+        });
+        document.getElementById('progressCreateFormElement').addEventListener('submit', function (event) {
+          event.preventDefault();
+          KSL.call('createProgressUpdate', KSL.getSessionToken(), {
+            taskId: document.getElementById('progressTaskIdInput').value.trim(),
+            employeeId: document.getElementById('progressEmployeeIdInput').value.trim(),
+            progress: Number(document.getElementById('progressValueInput').value || 0),
+            status: document.getElementById('progressStatusInput').value,
+            hoursWorked: Number(document.getElementById('progressHoursInput').value || 0),
+            workCompleted: document.getElementById('progressWorkCompletedInput').value,
+            workRemaining: document.getElementById('progressWorkRemainingInput').value,
+            challenges: document.getElementById('progressChallengesInput').value,
+            nextAction: document.getElementById('progressNextActionInput').value,
+            blockers: document.getElementById('progressBlockersInput').value,
+            remarks: document.getElementById('progressRemarksInput').value
+          })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Submit failed.');
+              }
+              KSL.showToast('Progress update saved.', 'success');
+              document.getElementById('progressCreateFormElement').reset();
+              document.getElementById('progressHoursInput').value = 0;
+              state.page = 1;
+              loadProgress();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Submit failed.', 'error');
+            });
         });
         document.getElementById('progressPendingButton').addEventListener('click', function () {
           document.getElementById('progressReviewFilter').value = 'Pending';

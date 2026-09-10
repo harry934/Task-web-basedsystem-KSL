@@ -126,7 +126,15 @@
           '<button class="btn btn-outline" type="button" data-action="edit" data-id="' +
           KSL.escapeHtml(team.teamId) + '">Edit</button>' +
           '<button class="btn btn-danger" type="button" data-action="archive" data-id="' +
-          KSL.escapeHtml(team.teamId) + '">Archive</button></div></td></tr>'
+          KSL.escapeHtml(team.teamId) + '">Archive</button>' +
+          (KSL.isAdministrator()
+            ? '<button class="btn btn-danger" type="button" data-action="delete" data-id="' +
+              KSL.escapeHtml(team.teamId) +
+              '" data-name="' +
+              KSL.escapeHtml(team.teamName || team.teamId) +
+              '">Delete</button>'
+            : '') +
+          '</div></td></tr>'
         );
       }).join('');
     }
@@ -232,6 +240,21 @@
             document.getElementById('teamDescriptionInput').value = team.teamDescription || '';
             document.getElementById('teamStatusInput').value = team.status || 'Active';
             KSL.openModal('teamModalBackdrop');
+          } else if (button.dataset.action === 'delete') {
+            if (!KSL.confirmDelete(button.dataset.name || id)) {
+              return;
+            }
+            KSL.call('deleteTeam', KSL.getSessionToken(), { teamId: id })
+              .then(function (response) {
+                if (!response || !response.success) {
+                  throw new Error((response && response.message) || 'Unable to delete team.');
+                }
+                KSL.showToast(response.message || 'Team deleted.', 'success');
+                loadTeams();
+              })
+              .catch(function (error) {
+                KSL.showToast(error.message || 'Unable to delete team.', 'error');
+              });
           } else if (button.dataset.action === 'archive') {
             if (!window.confirm('Archive this team? Active task references will block this action.')) {
               return;

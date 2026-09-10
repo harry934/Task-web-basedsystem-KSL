@@ -1,13 +1,19 @@
 <script>
   (function () {
     var SESSION_KEY = 'kslSessionToken';
+    var ROLE_KEY = 'kslUserRole';
+    var LOGO_KEY = 'kslLogoDataUri.v1';
     var KSL = (window.KSL = window.KSL || {});
     function readStoredToken_() {
       return sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY) || '';
     }
+    function readStoredRole_() {
+      return localStorage.getItem(ROLE_KEY) || sessionStorage.getItem(ROLE_KEY) || '';
+    }
     KSL.state = KSL.state || {
       sessionToken: readStoredToken_(),
-      bootstrap: null
+      bootstrap: null,
+      currentUser: null
     };
 
     KSL.getActivePage = function () {
@@ -44,6 +50,10 @@
 
     KSL.setSessionToken = function (token) {
       KSL.state.sessionToken = token || '';
+      KSL.state.bootstrap = null;
+      if (!token) {
+        KSL.state.currentUser = null;
+      }
       if (token) {
         sessionStorage.setItem(SESSION_KEY, token);
         localStorage.setItem(SESSION_KEY, token);
@@ -55,6 +65,133 @@
 
     KSL.clearSessionToken = function () {
       KSL.setSessionToken('');
+      KSL.setCachedRole('');
+    };
+
+    KSL.getCachedRole = function () {
+      return String((KSL.state.currentUser && KSL.state.currentUser.role) || readStoredRole_() || '');
+    };
+
+    KSL.setCachedRole = function (role) {
+      var value = String(role || '').trim();
+      if (value) {
+        sessionStorage.setItem(ROLE_KEY, value);
+        localStorage.setItem(ROLE_KEY, value);
+      } else {
+        sessionStorage.removeItem(ROLE_KEY);
+        localStorage.removeItem(ROLE_KEY);
+      }
+    };
+
+    KSL.showBootOverlay = function () {
+      KSL.showProcessing('Loading...');
+    };
+
+    KSL.hideBootOverlay = function () {
+      KSL.hideProcessing();
+      document.body.classList.remove('shell-pending');
+    };
+
+    KSL.applySharedLogo = function (src) {
+      if (!src) {
+        return;
+      }
+      document.querySelectorAll('.brand-logo-img, .topbar-logo, #loginLogoImg').forEach(function (img) {
+        if (img) {
+          img.src = src;
+        }
+      });
+    };
+
+    KSL.loadLogo = function (fetchIfMissing) {
+      var cached = '';
+      try {
+        cached = localStorage.getItem(LOGO_KEY) || '';
+      } catch (error) {
+        cached = '';
+      }
+      if (cached.indexOf('data:image') === 0) {
+        KSL.applySharedLogo(cached);
+        return Promise.resolve(cached);
+      }
+      if (!fetchIfMissing) {
+        return Promise.resolve('');
+      }
+      return KSL.runServer('getLogoDataUri')
+        .then(function (uri) {
+          if (!uri || String(uri).indexOf('data:image') !== 0) {
+            return '';
+          }
+          try {
+            localStorage.setItem(LOGO_KEY, uri);
+          } catch (error) {
+            // Ignore storage quota errors and still show the logo.
+          }
+          KSL.applySharedLogo(uri);
+          return uri;
+        })
+        .catch(function () {
+          return '';
+        });
+    };
+
+    KSL.renderSidebar = function (role) {
+      var nav = document.getElementById('sidebarNav');
+      if (!nav) {
+        return;
+      }
+      var items = (window.APP_TEMPLATE_STATE && window.APP_TEMPLATE_STATE.navItems) || [];
+      var activePage = KSL.getActivePage();
+      var scriptUrl = KSL.getScriptUrl();
+      var groupsOrder = [];
+      var grouped = {};
+      items.forEach(function (item) {
+        var allowed = item.roles || [];
+        if (role && allowed.indexOf(role) === -1) {
+          return;
+        }
+        if (!role) {
+          return;
+        }
+        var group = item.group || 'Menu';
+        if (!grouped[group]) {
+          grouped[group] = [];
+          groupsOrder.push(group);
+        }
+        grouped[group].push(item);
+      });
+      nav.innerHTML = groupsOrder
+        .map(function (group) {
+          var links = grouped[group]
+            .map(function (item) {
+              var active = activePage === item.id ? ' active' : '';
+              return (
+                '<a class="nav-link' +
+                active +
+                '" href="' +
+                KSL.escapeHtml(scriptUrl) +
+                '?page=' +
+                encodeURIComponent(item.id) +
+                '" data-page="' +
+                KSL.escapeHtml(item.id) +
+                '">' +
+                '<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+                (item.svg || '') +
+                '</svg><span>' +
+                KSL.escapeHtml(item.label) +
+                '</span></a>'
+              );
+            })
+            .join('');
+          return (
+            '<div class="nav-group"><div class="nav-group-label">' +
+            KSL.escapeHtml(group) +
+            '</div>' +
+            links +
+            '</div>'
+          );
+        })
+        .join('');
     };
 
     KSL.debounce = function (fn, waitMs) {
@@ -85,8 +222,12 @@
       });
     };
 
-    KSL.showProcessing = function () {
+    KSL.showProcessing = function (message) {
       var overlay = document.getElementById('appProcessingOverlay');
+      var text = document.getElementById('appProcessingMessage');
+      if (text) {
+        text.textContent = message || 'Please wait...';
+      }
       if (overlay) {
         overlay.classList.remove('hidden');
       }
@@ -148,18 +289,49 @@
     };
 
     KSL.navigate = function (page, extraQuery) {
-      var query = page ? '?page=' + encodeURIComponent(page) : '';
-      if (extraQuery) {
-        query += '&' + extraQuery;
-      }
-      var baseUrl = KSL.resolveNavigationBaseUrl();
-      if (!baseUrl) {
-        var message =
-          'Web app URL is not available. Open the deployed Web app link ending with /exec?page=login.';
-        KSL.showToast(message, 'error');
+      if (KSL.isEditorPreviewUrl()) {
+        KSL.showToast('Open the deployed web app link ending with /exec to move between pages.', 'error');
         return;
       }
-      window.location.href = baseUrl + query;
+      var params = new URLSearchParams();
+      if (page) {
+        params.set('page', page);
+      }
+      String(extraQuery || '')
+        .replace(/^\?/, '')
+        .split('&')
+        .forEach(function (part) {
+          if (!part) {
+            return;
+          }
+          var bits = part.split('=');
+          var key = decodeURIComponent(bits.shift() || '');
+          var value = decodeURIComponent(bits.join('=') || '');
+          if (!key || key === 't' || key === 'page') {
+            return;
+          }
+          params.set(key, value);
+        });
+      params.set('t', String(Date.now()));
+      var nextSearch = '?' + params.toString();
+      var baseUrl = KSL.resolveNavigationBaseUrl();
+      if (!baseUrl) {
+        KSL.showToast(
+          'Web app URL is not available. Open the deployed Web app link ending with /exec?page=login.',
+          'error'
+        );
+        return;
+      }
+      var nextUrl = baseUrl + nextSearch;
+      try {
+        if (window.top && window.top.location) {
+          window.top.location.assign(nextUrl);
+          return;
+        }
+      } catch (error) {
+        // Fall through to same-frame navigation.
+      }
+      window.location.href = nextUrl;
     };
 
     KSL.applyShellContext = function (bootstrapData) {
@@ -172,6 +344,8 @@
       var badgeElement = document.getElementById('notificationBadge');
 
       KSL.state.currentUser = user;
+      KSL.setCachedRole(role);
+      KSL.renderSidebar(role);
 
       if (userNameElement) {
         userNameElement.textContent = user.fullName || 'Unknown User';
@@ -194,23 +368,7 @@
         badgeElement.classList.toggle('hidden', unreadCount < 1);
       }
 
-      var links = document.querySelectorAll('[data-roles]');
-      links.forEach(function (link) {
-        var rolesCsv = link.dataset.roles || '';
-        var allowedRoles = rolesCsv
-          .split(',')
-          .map(function (part) {
-            return part.trim();
-          })
-          .filter(Boolean);
-        var isAllowed = allowedRoles.includes(role);
-        link.classList.toggle('hidden', !isAllowed);
-      });
-
-      document.querySelectorAll('.nav-group').forEach(function (group) {
-        var visibleCount = group.querySelectorAll('.nav-link:not(.hidden)').length;
-        group.classList.toggle('hidden', visibleCount === 0);
-      });
+      KSL.hideBootOverlay();
     };
 
     KSL.isAdministrator = function () {
@@ -243,9 +401,7 @@
     };
 
     KSL.redirectToLogin = function () {
-      var activePage = KSL.getActivePage();
-      var continueParam = activePage && activePage !== 'login' ? '&continue=' + encodeURIComponent(activePage) : '';
-      KSL.navigate('login', continueParam.replace(/^&/, ''));
+      KSL.navigate('login', 'relogin=1');
     };
 
     KSL.isInvalidSessionError = function (message) {
@@ -289,6 +445,7 @@
             KSL.clearSessionToken();
             KSL.redirectToLogin();
           } else {
+            KSL.hideBootOverlay();
             KSL.showToast(message, 'error');
           }
           throw error;
@@ -411,6 +568,12 @@
     };
 
     document.addEventListener('click', function (event) {
+      var navLink = event.target.closest('a.nav-link[data-page]');
+      if (navLink) {
+        event.preventDefault();
+        KSL.navigate(navLink.getAttribute('data-page'));
+        return;
+      }
       var closeButton = event.target.closest('[data-close-modal]');
       if (closeButton) {
         var modalId = closeButton.getAttribute('data-close-modal');
@@ -419,10 +582,12 @@
     });
 
     document.addEventListener('DOMContentLoaded', function () {
+      KSL.loadLogo(KSL.getActivePage() === 'login');
       var logoutButton = document.getElementById('logoutButton');
       if (logoutButton) {
         logoutButton.addEventListener('click', function () {
           var token = KSL.getSessionToken();
+          KSL.showProcessing('Signing out...');
           KSL.call('logoutSession', token)
             .catch(function () {
               return null;
@@ -440,9 +605,19 @@
         });
       }
       if (KSL.getActivePage() !== 'login') {
-        KSL.initShell().catch(function () {
-          return null;
-        });
+        var cachedRole = readStoredRole_();
+        if (cachedRole) {
+          KSL.renderSidebar(cachedRole);
+        }
+        KSL.initShell()
+          .then(function () {
+            return KSL.loadLogo(true);
+          })
+          .catch(function () {
+            return null;
+          });
+      } else {
+        KSL.hideBootOverlay();
       }
     });
   })();

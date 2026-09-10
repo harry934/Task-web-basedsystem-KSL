@@ -11,13 +11,12 @@
           <i class="fa-solid fa-plus"></i>
           New Department
         </button>
-        <button id="departmentsRefreshButton" class="btn btn-outline" type="button">
-          <i class="fa-solid fa-rotate-right"></i>
-          Refresh
-        </button>
+        <button id="departmentsRefreshButton" class="btn btn-outline" type="button">Refresh</button>
+        <button id="departmentsClearButton" class="btn btn-outline" type="button">Clear</button>
       </div>
       <div class="toolbar-right">
         <input id="departmentsSearchInput" class="input" type="search" placeholder="Search departments..." style="min-width: 240px;">
+        <input id="departmentsHead" class="input" type="search" placeholder="Department head" style="min-width: 160px;">
         <select id="departmentsStatusFilter" class="select" style="min-width: 150px;">
           <option value="">All statuses</option>
           <option value="Active">Active</option>
@@ -105,6 +104,7 @@
     function getFilters() {
       return {
         query: document.getElementById('departmentsSearchInput').value.trim(),
+        departmentHead: document.getElementById('departmentsHead').value.trim(),
         status: document.getElementById('departmentsStatusFilter').value,
         page: state.page,
         pageSize: state.pageSize
@@ -149,6 +149,13 @@
             '<button class="btn btn-danger" type="button" data-action="archive" data-id="' +
             KSL.escapeHtml(department.departmentId) +
             '">Archive</button>' +
+            (KSL.isAdministrator()
+              ? '<button class="btn btn-danger" type="button" data-action="delete" data-id="' +
+                KSL.escapeHtml(department.departmentId) +
+                '" data-name="' +
+                KSL.escapeHtml(department.departmentName || department.departmentId) +
+                '">Delete</button>'
+              : '') +
             '</div></td>' +
             '</tr>'
           );
@@ -317,6 +324,20 @@
         state.page = 1;
         loadDepartments();
       });
+      document.getElementById('departmentsHead').addEventListener(
+        'input',
+        KSL.debounce(function () {
+          state.page = 1;
+          loadDepartments();
+        }, 400)
+      );
+      document.getElementById('departmentsClearButton').addEventListener('click', function () {
+        document.getElementById('departmentsSearchInput').value = '';
+        document.getElementById('departmentsHead').value = '';
+        document.getElementById('departmentsStatusFilter').value = '';
+        state.page = 1;
+        loadDepartments();
+      });
       document.getElementById('departmentForm').addEventListener('submit', submitDepartment);
 
       document.getElementById('departmentsTableBody').addEventListener('click', function (event) {
@@ -330,6 +351,18 @@
           openEditModal(id);
         } else if (action === 'archive') {
           archiveDepartment(id);
+        } else if (action === 'delete' && KSL.confirmDelete(button.dataset.name || id)) {
+          KSL.call('deleteDepartment', KSL.getSessionToken(), { departmentId: id })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to delete department.');
+              }
+              KSL.showToast('Department deleted.', 'success');
+              loadDepartments();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to delete department.', 'error');
+            });
         }
       });
     }

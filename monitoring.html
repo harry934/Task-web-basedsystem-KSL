@@ -17,7 +17,10 @@
         <button id="monitoringRefreshButton" class="btn btn-primary" type="button">Refresh</button>
       </div>
       <div class="toolbar-right">
-        <input id="monitoringSearchInput" class="input" type="search" placeholder="Search..." style="min-width: 220px;">
+        <input id="monitoringSearchInput" class="input" type="search" placeholder="Search..." style="min-width: 180px;">
+        <input id="monitoringDepartmentFilter" class="input" type="search" placeholder="Department" style="min-width: 140px;">
+        <input id="monitoringTeamFilter" class="input" type="search" placeholder="Team" style="min-width: 130px;">
+        <input id="monitoringAssigneeFilter" class="input" type="search" placeholder="Assignee" style="min-width: 140px;">
       </div>
     </div>
   </div>
@@ -34,15 +37,26 @@
           <th>Flag</th>
           <th>Due</th>
           <th>Progress</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="monitoringTableBody">
-        <tr><td colspan="8" class="empty-state">Loading...</td></tr>
+        <tr><td colspan="9" class="empty-state">Loading...</td></tr>
       </tbody>
     </table>
   </div>
   <div id="monitoringPagination" class="pagination"></div>
 </section>
+
+<div id="monitoringDetailBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="monitoringDetailTitle">Task detail</h3>
+      <button class="btn btn-outline" type="button" data-close-modal="monitoringDetailBackdrop">Close</button>
+    </div>
+    <div id="monitoringDetailBody"></div>
+  </div>
+</div>
 
 <script>
   (function () {
@@ -82,6 +96,9 @@
       KSL.call('listMonitoredTasks', KSL.getSessionToken(), {
         view: state.view,
         query: document.getElementById('monitoringSearchInput').value.trim(),
+        department: document.getElementById('monitoringDepartmentFilter').value.trim(),
+        team: document.getElementById('monitoringTeamFilter').value.trim(),
+        assignee: document.getElementById('monitoringAssigneeFilter').value.trim(),
         page: state.page,
         pageSize: state.pageSize
       })
@@ -113,7 +130,7 @@
           var items = payload.items || [];
           var body = document.getElementById('monitoringTableBody');
           if (!items.length) {
-            body.innerHTML = '<tr><td colspan="8" class="empty-state">No matching tasks.</td></tr>';
+            body.innerHTML = '<tr><td colspan="9" class="empty-state">No matching tasks.</td></tr>';
             renderPagination();
             return;
           }
@@ -138,7 +155,9 @@
                 KSL.escapeHtml(KSL.formatDate(item.dueDate) || '-') +
                 '</td><td>' +
                 KSL.escapeHtml(String(item.progress || 0) + '%') +
-                '</td></tr>'
+                '</td><td><button class="btn btn-outline" type="button" data-action="detail" data-id="' +
+                KSL.escapeHtml(item.taskId) +
+                '">Open</button></td></tr>'
               );
             })
             .join('');
@@ -162,13 +181,73 @@
           state.page = 1;
           loadMonitoring();
         });
-        document.getElementById('monitoringSearchInput').addEventListener(
-          'input',
-          KSL.debounce(function () {
-            state.page = 1;
-            loadMonitoring();
-          }, 400)
-        );
+        ['monitoringSearchInput', 'monitoringDepartmentFilter', 'monitoringTeamFilter', 'monitoringAssigneeFilter'].forEach(function (id) {
+          document.getElementById(id).addEventListener(
+            'input',
+            KSL.debounce(function () {
+              state.page = 1;
+              loadMonitoring();
+            }, 400)
+          );
+        });
+        document.getElementById('monitoringTableBody').addEventListener('click', function (event) {
+          var button = event.target.closest('button[data-action="detail"]');
+          if (!button) {
+            return;
+          }
+          KSL.call('getMonitoredTaskDetail', KSL.getSessionToken(), { taskId: button.dataset.id })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to load task detail.');
+              }
+              var data = response.data || {};
+              var task = data.task || {};
+              document.getElementById('monitoringDetailTitle').textContent =
+                (task.taskId || button.dataset.id) + ' — ' + (task.taskTitle || 'Task');
+              document.getElementById('monitoringDetailBody').innerHTML =
+                '<p>' +
+                KSL.escapeHtml(task.taskDescription || 'No description.') +
+                '</p>' +
+                '<p class="page-note">Status: ' +
+                KSL.escapeHtml(task.status || '-') +
+                ' · Progress: ' +
+                KSL.escapeHtml(String(task.progress || 0)) +
+                '% · Assignee: ' +
+                KSL.escapeHtml(task.primaryAssigneeName || '-') +
+                '</p>' +
+                '<strong>Assignments</strong><ul class="collab-list">' +
+                ((data.assignments || [])
+                  .map(function (item) {
+                    return (
+                      '<li>' +
+                      KSL.escapeHtml(item.employeeName || item.employeeId) +
+                      ' · ' +
+                      KSL.escapeHtml(item.assignmentStatus || '') +
+                      ' · ' +
+                      KSL.escapeHtml(String(item.employeeProgress || 0) + '%') +
+                      '</li>'
+                    );
+                  })
+                  .join('') || '<li>None</li>') +
+                '</ul><strong>Comments</strong><ul class="collab-list">' +
+                ((data.comments || [])
+                  .map(function (item) {
+                    return (
+                      '<li>' +
+                      KSL.escapeHtml(item.employeeName || 'User') +
+                      ': ' +
+                      KSL.escapeHtml(item.comment || '') +
+                      '</li>'
+                    );
+                  })
+                  .join('') || '<li>None</li>') +
+                '</ul>';
+              KSL.openModal('monitoringDetailBackdrop');
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to load task detail.', 'error');
+            });
+        });
         loadMonitoring();
       });
     });

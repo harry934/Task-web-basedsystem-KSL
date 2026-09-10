@@ -1,7 +1,7 @@
 <section class="login-card">
   <img
     class="login-logo"
-    src="https://kenyashipyards.co.ke/wp-content/uploads/2022/06/cropped-KSL-High-quality-Logo-300x273.png"
+    id="loginLogoImg"
     alt="Kenya Shipyards Limited"
   >
   <p class="login-kicker">Ministry of Defence</p>
@@ -29,7 +29,7 @@
         <input id="loginPasswordInput" class="input" type="password" autocomplete="current-password" required>
       </div>
       <div class="field full">
-        <button class="btn btn-primary auth-submit-button" type="submit">Sign in</button>
+        <button id="loginSubmitButton" class="btn btn-primary auth-submit-button" type="submit">Sign in</button>
       </div>
     </form>
     <p class="auth-alt-link">
@@ -62,7 +62,7 @@
         <input id="registerConfirmPasswordInput" class="input" type="password" autocomplete="new-password" required>
       </div>
       <div class="field full">
-        <button class="btn btn-secondary auth-submit-button" type="submit">Create account</button>
+        <button id="registerSubmitButton" class="btn btn-secondary auth-submit-button" type="submit">Create account</button>
       </div>
     </form>
     <p class="auth-alt-link">
@@ -118,12 +118,31 @@
       setAuthPanel('login');
     }
 
+    function setFormBusy(form, button, isBusy, busyLabel, idleLabel) {
+      if (button) {
+        button.disabled = isBusy;
+        button.textContent = isBusy ? busyLabel : idleLabel;
+      }
+      if (!form) {
+        return;
+      }
+      form.querySelectorAll('input, button').forEach(function (field) {
+        if (field !== button) {
+          field.disabled = isBusy;
+        }
+      });
+    }
+
     function handleLogin(event) {
       event.preventDefault();
+      var loginForm = document.getElementById('passwordLoginForm');
+      var loginButton = document.getElementById('loginSubmitButton');
       var loginPayload = {
         username: document.getElementById('loginUsernameInput').value.trim(),
         password: document.getElementById('loginPasswordInput').value
       };
+      setFormBusy(loginForm, loginButton, true, 'Signing in...', 'Sign in');
+      KSL.showProcessing('Signing in...');
       KSL.call('loginWithPassword', loginPayload)
         .then(function (result) {
           if (!result || !result.success) {
@@ -132,6 +151,8 @@
 
           var responsePayload = result.data || {};
           if (responsePayload.requiresApproval) {
+            KSL.hideProcessing();
+            setFormBusy(loginForm, loginButton, false, 'Signing in...', 'Sign in');
             showLoginMessage(result.message || 'Account is pending administrator approval.', false);
             return;
           }
@@ -141,10 +162,15 @@
           }
 
           KSL.setSessionToken(responsePayload.sessionToken);
-          var continuePage = KSL.readQueryParam('continue') || 'dashboard';
-          KSL.navigate(continuePage);
+          if (responsePayload.user && responsePayload.user.role) {
+            KSL.setCachedRole(responsePayload.user.role);
+          }
+          KSL.showProcessing('Opening dashboard...');
+          KSL.navigate('dashboard');
         })
         .catch(function (error) {
+          KSL.hideProcessing();
+          setFormBusy(loginForm, loginButton, false, 'Signing in...', 'Sign in');
           KSL.showToast(error.message || 'Login failed.', 'error');
           showLoginMessage(error.message || 'Login failed.', true);
         });
@@ -152,6 +178,8 @@
 
     function handleRegistration(event) {
       event.preventDefault();
+      var registerForm = document.getElementById('passwordRegisterForm');
+      var registerButton = document.getElementById('registerSubmitButton');
       var fullName = document.getElementById('registerFullNameInput').value.trim();
       var username = document.getElementById('registerUsernameInput').value.trim();
       var email = document.getElementById('registerEmailInput').value.trim();
@@ -162,6 +190,8 @@
         return;
       }
 
+      setFormBusy(registerForm, registerButton, true, 'Creating account...', 'Create account');
+      KSL.showProcessing('Creating account...');
       KSL.call('registerWithPassword', {
         fullName: fullName,
         username: username,
@@ -184,6 +214,10 @@
         .catch(function (error) {
           KSL.showToast(error.message || 'Registration failed.', 'error');
           showLoginMessage(error.message || 'Registration failed.', true);
+        })
+        .finally(function () {
+          KSL.hideProcessing();
+          setFormBusy(registerForm, registerButton, false, 'Creating account...', 'Create account');
         });
     }
 
@@ -194,7 +228,7 @@
       }
       var reloginParam = String(KSL.readQueryParam('relogin') || '').toLowerCase();
       if (reloginParam === '1' || reloginParam === 'true' || reloginParam === 'yes') {
-        clearExistingSession(true);
+        clearExistingSession(false);
         return;
       }
       var existingToken = KSL.getSessionToken();
@@ -204,8 +238,11 @@
       KSL.call('getAppBootstrap', existingToken, 'dashboard')
         .then(function (result) {
           if (result && result.success) {
-            var continuePage = KSL.readQueryParam('continue') || 'dashboard';
-            KSL.navigate(continuePage);
+            if (result.data && result.data.user && result.data.user.role) {
+              KSL.setCachedRole(result.data.user.role);
+            }
+            KSL.showProcessing('Opening dashboard...');
+            KSL.navigate('dashboard');
           } else if (result && KSL.isInvalidSessionError(result.message)) {
             KSL.clearSessionToken();
           }

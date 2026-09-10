@@ -73,6 +73,18 @@
           <textarea id="myWorkCompletedInput" class="textarea"></textarea>
         </div>
         <div class="field full">
+          <label for="myWorkRemaining">Work remaining</label>
+          <textarea id="myWorkRemaining" class="textarea"></textarea>
+        </div>
+        <div class="field full">
+          <label for="myChallengesInput">Challenges</label>
+          <textarea id="myChallengesInput" class="textarea"></textarea>
+        </div>
+        <div class="field full">
+          <label for="myNextActionInput">Next action</label>
+          <textarea id="myNextActionInput" class="textarea"></textarea>
+        </div>
+        <div class="field full">
           <label for="myBlockersInput">Blockers</label>
           <textarea id="myBlockersInput" class="textarea"></textarea>
         </div>
@@ -302,6 +314,9 @@
             status: document.getElementById('myStatusInput').value,
             hoursWorked: Number(document.getElementById('myHoursInput').value || 0),
             workCompleted: document.getElementById('myWorkCompletedInput').value,
+            workRemaining: document.getElementById('myWorkRemaining').value,
+            challenges: document.getElementById('myChallengesInput').value,
+            nextAction: document.getElementById('myNextActionInput').value,
             blockers: document.getElementById('myBlockersInput').value,
             remarks: document.getElementById('myRemarksInput').value
           })

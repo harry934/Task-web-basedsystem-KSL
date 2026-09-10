@@ -7,27 +7,35 @@
   <div class="card">
     <div class="toolbar">
       <div class="toolbar-left">
-        <button id="newTaskButton" class="btn btn-primary" type="button">
-          <i class="fa-solid fa-plus"></i>
-          New Task
-        </button>
-        <button id="tasksRefreshButton" class="btn btn-outline" type="button">
-          <i class="fa-solid fa-rotate-right"></i>
-          Refresh
-        </button>
+        <button id="newTaskButton" class="btn btn-primary" type="button">New Task</button>
+        <button id="tasksRefreshButton" class="btn btn-outline" type="button">Refresh</button>
+        <button id="tasksExportButton" class="btn btn-outline" type="button">Export</button>
+        <button id="tasksExportPdfButton" class="btn btn-outline" type="button">Export PDF</button>
       </div>
       <div class="toolbar-right">
-        <input id="tasksSearchInput" class="input" type="search" placeholder="Search task title, description, assignee..." style="min-width: 280px;">
-        <select id="tasksDepartmentFilter" class="select" style="min-width: 160px;">
+        <input id="tasksSearchInput" class="input" type="search" placeholder="Search task title, description, assignee..." style="min-width: 240px;">
+        <select id="tasksDepartmentFilter" class="select" style="min-width: 150px;">
           <option value="">All departments</option>
         </select>
-        <select id="tasksPriorityFilter" class="select" style="min-width: 140px;">
+        <select id="tasksTeamFilter" class="select" style="min-width: 140px;">
+          <option value="">All teams</option>
+        </select>
+        <select id="tasksSectionFilter" class="select" style="min-width: 140px;">
+          <option value="">All sections</option>
+        </select>
+        <select id="tasksCategoryFilter" class="select" style="min-width: 150px;">
+          <option value="">All categories</option>
+        </select>
+        <select id="tasksTypeFilter" class="select" style="min-width: 140px;">
+          <option value="">All types</option>
+        </select>
+        <select id="tasksPriorityFilter" class="select" style="min-width: 130px;">
           <option value="">All priorities</option>
         </select>
-        <select id="tasksStatusFilter" class="select" style="min-width: 150px;">
+        <select id="tasksStatusFilter" class="select" style="min-width: 140px;">
           <option value="">All statuses</option>
         </select>
-        <select id="tasksRecordStatusFilter" class="select" style="min-width: 140px;">
+        <select id="tasksRecordStatusFilter" class="select" style="min-width: 130px;">
           <option value="Active">Active</option>
           <option value="Archived">Archived</option>
         </select>
@@ -42,10 +50,10 @@
           <th>Task ID</th>
           <th>Title</th>
           <th>Department</th>
+          <th>Team</th>
           <th>Priority</th>
           <th>Status</th>
           <th>Progress</th>
-          <th>Start</th>
           <th>Due</th>
           <th>Actions</th>
         </tr>
@@ -64,10 +72,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3 id="taskModalTitle">Create Task</h3>
-      <button class="btn btn-outline" type="button" data-close-modal="taskModalBackdrop">
-        <i class="fa-solid fa-xmark"></i>
-        Close
-      </button>
+      <button class="btn btn-outline" type="button" data-close-modal="taskModalBackdrop">Close</button>
     </div>
 
     <form id="taskForm">
@@ -84,6 +89,26 @@
         <div class="field">
           <label for="taskDepartmentInput">Department</label>
           <select id="taskDepartmentInput" class="select" required></select>
+        </div>
+        <div class="field">
+          <label for="taskTeamInput">Team</label>
+          <select id="taskTeamInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="taskSectionInput">Section</label>
+          <select id="taskSectionInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="taskCategoryInput">Category</label>
+          <select id="taskCategoryInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="taskTypeInput">Type</label>
+          <select id="taskTypeInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="taskParentInput">Parent task</label>
+          <select id="taskParentInput" class="select"></select>
         </div>
         <div class="field">
           <label for="taskPriorityInput">Priority</label>
@@ -121,6 +146,17 @@
           <label for="taskPrimaryAssigneeNameInput">Primary Assignee Name</label>
           <input id="taskPrimaryAssigneeNameInput" class="input" type="text">
         </div>
+        <div class="field">
+          <label for="taskDelayReasonInput">Delay reason</label>
+          <select id="taskDelayReasonInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="taskBlockerInput">Blocker</label>
+          <select id="taskBlockerInput" class="select">
+            <option value="">No</option>
+            <option value="Yes">Yes</option>
+          </select>
+        </div>
         <div class="field full">
           <label for="taskBlockerDescriptionInput">Blocker Description</label>
           <textarea id="taskBlockerDescriptionInput" class="textarea"></textarea>
@@ -130,12 +166,27 @@
           <textarea id="taskCompletionNotesInput" class="textarea"></textarea>
         </div>
       </div>
+      <div id="taskCollab" class="collab-panel hidden">
+        <strong>Comments and attachments</strong>
+        <ul id="taskCommentsList" class="collab-list"></ul>
+        <div class="form-grid" style="margin-top: 10px;">
+          <div class="field full">
+            <label for="taskCommentInput">Add comment</label>
+            <textarea id="taskCommentInput" class="textarea"></textarea>
+          </div>
+        </div>
+        <div class="toolbar" style="margin-top: 8px;">
+          <div class="toolbar-left">
+            <button id="taskCommentButton" class="btn btn-outline" type="button">Save comment</button>
+            <label class="btn btn-outline" for="taskAttachmentInput">Upload attachment</label>
+            <input id="taskAttachmentInput" class="hidden" type="file">
+          </div>
+        </div>
+        <ul id="taskAttachmentsList" class="collab-list"></ul>
+      </div>
       <div class="modal-footer">
         <button class="btn btn-outline" type="button" data-close-modal="taskModalBackdrop">Cancel</button>
-        <button class="btn btn-primary" type="submit">
-          <i class="fa-solid fa-floppy-disk"></i>
-          Save Task
-        </button>
+        <button class="btn btn-primary" type="submit">Save Task</button>
       </div>
     </form>
   </div>
@@ -151,7 +202,13 @@
       metadata: {
         priorities: [],
         statuses: [],
-        departments: []
+        departments: [],
+        teams: [],
+        sections: [],
+        categories: [],
+        taskTypes: [],
+        delayReasons: [],
+        parentTasks: []
       }
     };
 
@@ -188,6 +245,10 @@
       return {
         query: document.getElementById('tasksSearchInput').value.trim(),
         department: document.getElementById('tasksDepartmentFilter').value,
+        team: document.getElementById('tasksTeamFilter').value,
+        section: document.getElementById('tasksSectionFilter').value,
+        taskCategory: document.getElementById('tasksCategoryFilter').value,
+        taskType: document.getElementById('tasksTypeFilter').value,
         priority: document.getElementById('tasksPriorityFilter').value,
         status: document.getElementById('tasksStatusFilter').value,
         recordStatus: document.getElementById('tasksRecordStatusFilter').value,
@@ -202,7 +263,7 @@
         return;
       }
       if (!state.tasks.length) {
-        body.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fa-solid fa-list-check"></i><p>No tasks found.</p></td></tr>';
+        body.innerHTML = '<tr><td colspan="9" class="empty-state"><p>No tasks found.</p></td></tr>';
         return;
       }
       body.innerHTML = state.tasks
@@ -225,6 +286,15 @@
                 '">Archive</button>'
             );
           }
+          if (KSL.isAdministrator()) {
+            actions.push(
+              '<button class="btn btn-danger" type="button" data-action="delete" data-id="' +
+                KSL.escapeHtml(task.taskId) +
+                '" data-name="' +
+                KSL.escapeHtml(task.taskTitle || task.taskId) +
+                '">Delete</button>'
+            );
+          }
           return (
             '<tr>' +
             '<td>' +
@@ -237,6 +307,9 @@
             KSL.escapeHtml(task.department || '-') +
             '</td>' +
             '<td>' +
+            KSL.escapeHtml(task.team || '-') +
+            '</td>' +
+            '<td>' +
             KSL.escapeHtml(task.priority || '-') +
             '</td>' +
             '<td><span class="status-badge ' +
@@ -246,9 +319,6 @@
             '</span></td>' +
             '<td>' +
             KSL.escapeHtml(String(task.progress || 0) + '%') +
-            '</td>' +
-            '<td>' +
-            KSL.escapeHtml(KSL.formatDate(task.startDate) || '-') +
             '</td>' +
             '<td>' +
             KSL.escapeHtml(KSL.formatDate(task.dueDate) || '-') +
@@ -263,37 +333,7 @@
     }
 
     function renderPagination() {
-      var pagination = document.getElementById('tasksPagination');
-      if (!pagination) {
-        return;
-      }
-      pagination.innerHTML =
-        '<button type="button" id="tasksPrevPage" ' +
-        (state.page <= 1 ? 'disabled' : '') +
-        '>Previous</button>' +
-        '<button type="button" disabled>Page ' +
-        state.page +
-        ' of ' +
-        state.pages +
-        '</button>' +
-        '<button type="button" id="tasksNextPage" ' +
-        (state.page >= state.pages ? 'disabled' : '') +
-        '>Next</button>';
-
-      var prevButton = document.getElementById('tasksPrevPage');
-      var nextButton = document.getElementById('tasksNextPage');
-      if (prevButton) {
-        prevButton.addEventListener('click', function () {
-          state.page -= 1;
-          loadTasks();
-        });
-      }
-      if (nextButton) {
-        nextButton.addEventListener('click', function () {
-          state.page += 1;
-          loadTasks();
-        });
-      }
+      KSL.renderPager('tasksPagination', state, loadTasks);
     }
 
     function loadTaskMetadata() {
@@ -302,7 +342,6 @@
           throw new Error((response && response.message) || 'Unable to load task metadata.');
         }
         state.metadata = response.data || state.metadata;
-
         renderOptions(
           document.getElementById('tasksDepartmentFilter'),
           state.metadata.departments || [],
@@ -317,10 +356,26 @@
           'departmentName',
           'departmentName'
         );
+        renderOptions(document.getElementById('tasksTeamFilter'), state.metadata.teams || [], 'All teams');
+        renderOptions(document.getElementById('taskTeamInput'), state.metadata.teams || [], 'Select team');
+        renderOptions(document.getElementById('tasksSectionFilter'), state.metadata.sections || [], 'All sections');
+        renderOptions(document.getElementById('taskSectionInput'), state.metadata.sections || [], 'Select section');
+        renderOptions(document.getElementById('tasksCategoryFilter'), state.metadata.categories || [], 'All categories');
+        renderOptions(document.getElementById('taskCategoryInput'), state.metadata.categories || [], 'Select category');
+        renderOptions(document.getElementById('tasksTypeFilter'), state.metadata.taskTypes || [], 'All types');
+        renderOptions(document.getElementById('taskTypeInput'), state.metadata.taskTypes || [], 'Select type');
         renderOptions(document.getElementById('tasksPriorityFilter'), state.metadata.priorities || [], 'All priorities');
         renderOptions(document.getElementById('taskPriorityInput'), state.metadata.priorities || [], '');
         renderOptions(document.getElementById('tasksStatusFilter'), state.metadata.statuses || [], 'All statuses');
         renderOptions(document.getElementById('taskStatusInput'), state.metadata.statuses || [], '');
+        renderOptions(document.getElementById('taskDelayReasonInput'), state.metadata.delayReasons || [], 'Select reason');
+        renderOptions(
+          document.getElementById('taskParentInput'),
+          state.metadata.parentTasks || [],
+          'No parent',
+          'taskId',
+          'taskTitle'
+        );
       });
     }
 
@@ -350,6 +405,9 @@
       document.getElementById('taskProgressInput').value = 0;
       document.getElementById('taskEstimatedHoursInput').value = 0;
       document.getElementById('taskActualHoursInput').value = 0;
+      document.getElementById('taskCollab').classList.add('hidden');
+      document.getElementById('taskCommentsList').innerHTML = '';
+      document.getElementById('taskAttachmentsList').innerHTML = '';
     }
 
     function openCreateModal() {
@@ -357,17 +415,47 @@
       KSL.openModal('taskModalBackdrop');
     }
 
-    function toDateInputValue(value) {
-      if (!value) {
-        return '';
+    function loadCollaboration(taskId) {
+      var panel = document.getElementById('taskCollab');
+      if (!taskId) {
+        panel.classList.add('hidden');
+        return;
       }
-      var date = new Date(value);
-      if (isNaN(date.getTime())) {
-        return '';
-      }
-      var mm = String(date.getMonth() + 1).padStart(2, '0');
-      var dd = String(date.getDate()).padStart(2, '0');
-      return date.getFullYear() + '-' + mm + '-' + dd;
+      panel.classList.remove('hidden');
+      KSL.call('listTaskCollaboration', KSL.getSessionToken(), { taskId: taskId })
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Unable to load comments.');
+          }
+          var data = response.data || {};
+          document.getElementById('taskCommentsList').innerHTML = (data.comments || [])
+            .map(function (item) {
+              return (
+                '<li><strong>' +
+                KSL.escapeHtml(item.employeeName || 'User') +
+                '</strong> · ' +
+                KSL.escapeHtml(KSL.formatDate(item.createdTimestamp) || '') +
+                '<br>' +
+                KSL.escapeHtml(item.comment || '') +
+                '</li>'
+              );
+            })
+            .join('') || '<li>No comments yet.</li>';
+          document.getElementById('taskAttachmentsList').innerHTML = (data.attachments || [])
+            .map(function (item) {
+              return (
+                '<li><a href="' +
+                KSL.escapeHtml(item.fileUrl) +
+                '" target="_blank" rel="noopener">' +
+                KSL.escapeHtml(item.fileName) +
+                '</a></li>'
+              );
+            })
+            .join('') || '<li>No attachments yet.</li>';
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Unable to load comments.', 'error');
+        });
     }
 
     function openEditModal(taskId) {
@@ -383,17 +471,25 @@
       document.getElementById('taskTitleInput').value = task.taskTitle || '';
       document.getElementById('taskDescriptionInput').value = task.taskDescription || '';
       document.getElementById('taskDepartmentInput').value = task.department || '';
+      document.getElementById('taskTeamInput').value = task.team || '';
+      document.getElementById('taskSectionInput').value = task.section || '';
+      document.getElementById('taskCategoryInput').value = task.taskCategory || '';
+      document.getElementById('taskTypeInput').value = task.taskType || '';
+      document.getElementById('taskParentInput').value = task.parentTaskId || '';
       document.getElementById('taskPriorityInput').value = task.priority || '';
       document.getElementById('taskStatusInput').value = task.status || '';
       document.getElementById('taskProgressInput').value = Number(task.progress || 0);
-      document.getElementById('taskStartDateInput').value = toDateInputValue(task.startDate);
-      document.getElementById('taskDueDateInput').value = toDateInputValue(task.dueDate);
+      document.getElementById('taskStartDateInput').value = KSL.toDateInput(task.startDate);
+      document.getElementById('taskDueDateInput').value = KSL.toDateInput(task.dueDate);
       document.getElementById('taskEstimatedHoursInput').value = Number(task.estimatedHours || 0);
       document.getElementById('taskActualHoursInput').value = Number(task.actualHours || 0);
       document.getElementById('taskPrimaryAssigneeInput').value = task.primaryAssignee || '';
       document.getElementById('taskPrimaryAssigneeNameInput').value = task.primaryAssigneeName || '';
+      document.getElementById('taskDelayReasonInput').value = task.delayReason || '';
+      document.getElementById('taskBlockerInput').value = task.blocker || '';
       document.getElementById('taskBlockerDescriptionInput').value = task.blockerDescription || '';
       document.getElementById('taskCompletionNotesInput').value = task.completionNotes || '';
+      loadCollaboration(task.taskId);
       KSL.openModal('taskModalBackdrop');
     }
 
@@ -403,6 +499,11 @@
         taskTitle: document.getElementById('taskTitleInput').value.trim(),
         taskDescription: document.getElementById('taskDescriptionInput').value.trim(),
         department: document.getElementById('taskDepartmentInput').value,
+        team: document.getElementById('taskTeamInput').value,
+        section: document.getElementById('taskSectionInput').value,
+        taskCategory: document.getElementById('taskCategoryInput').value,
+        taskType: document.getElementById('taskTypeInput').value,
+        parentTaskId: document.getElementById('taskParentInput').value,
         priority: document.getElementById('taskPriorityInput').value,
         status: document.getElementById('taskStatusInput').value,
         progress: Number(document.getElementById('taskProgressInput').value || 0),
@@ -412,6 +513,8 @@
         actualHours: Number(document.getElementById('taskActualHoursInput').value || 0),
         primaryAssignee: document.getElementById('taskPrimaryAssigneeInput').value.trim(),
         primaryAssigneeName: document.getElementById('taskPrimaryAssigneeNameInput').value.trim(),
+        delayReason: document.getElementById('taskDelayReasonInput').value,
+        blocker: document.getElementById('taskBlockerInput').value,
         blockerDescription: document.getElementById('taskBlockerDescriptionInput').value.trim(),
         completionNotes: document.getElementById('taskCompletionNotesInput').value.trim()
       };
@@ -437,37 +540,19 @@
         });
     }
 
-    function archiveTask(taskId) {
-      if (!window.confirm('Archive this task?')) {
-        return;
-      }
-      KSL.call('archiveTask', KSL.getSessionToken(), { taskId: taskId })
+    function exportTasks(format) {
+      var options = getFilters();
+      options.format = format;
+      KSL.callBusy('exportTasks', KSL.getSessionToken(), options)
         .then(function (response) {
           if (!response || !response.success) {
-            throw new Error((response && response.message) || 'Unable to archive task.');
+            throw new Error((response && response.message) || 'Export failed.');
           }
-          KSL.showToast('Task archived.', 'success');
-          loadTasks();
+          KSL.downloadFile(response.data);
+          KSL.showToast('Report generated.', 'success');
         })
         .catch(function (error) {
-          KSL.showToast(error.message || 'Unable to archive task.', 'error');
-        });
-    }
-
-    function reopenTask(taskId) {
-      if (!window.confirm('Reopen this task?')) {
-        return;
-      }
-      KSL.call('reopenTask', KSL.getSessionToken(), { taskId: taskId })
-        .then(function (response) {
-          if (!response || !response.success) {
-            throw new Error((response && response.message) || 'Unable to reopen task.');
-          }
-          KSL.showToast('Task reopened.', 'success');
-          loadTasks();
-        })
-        .catch(function (error) {
-          KSL.showToast(error.message || 'Unable to reopen task.', 'error');
+          KSL.showToast(error.message || 'Export failed.', 'error');
         });
     }
 
@@ -477,27 +562,85 @@
         state.page = 1;
         loadTasks();
       });
-      document.getElementById('tasksSearchInput').addEventListener('input', function () {
-        state.page = 1;
-        loadTasks();
+      document.getElementById('tasksExportButton').addEventListener('click', function () {
+        exportTasks('csv');
       });
-      document.getElementById('tasksDepartmentFilter').addEventListener('change', function () {
-        state.page = 1;
-        loadTasks();
+      document.getElementById('tasksExportPdfButton').addEventListener('click', function () {
+        exportTasks('pdf');
       });
-      document.getElementById('tasksPriorityFilter').addEventListener('change', function () {
-        state.page = 1;
-        loadTasks();
-      });
-      document.getElementById('tasksStatusFilter').addEventListener('change', function () {
-        state.page = 1;
-        loadTasks();
-      });
-      document.getElementById('tasksRecordStatusFilter').addEventListener('change', function () {
-        state.page = 1;
-        loadTasks();
+      [
+        'tasksSearchInput',
+        'tasksDepartmentFilter',
+        'tasksTeamFilter',
+        'tasksSectionFilter',
+        'tasksCategoryFilter',
+        'tasksTypeFilter',
+        'tasksPriorityFilter',
+        'tasksStatusFilter',
+        'tasksRecordStatusFilter'
+      ].forEach(function (id) {
+        var eventName = id === 'tasksSearchInput' ? 'input' : 'change';
+        var handler = function () {
+          state.page = 1;
+          loadTasks();
+        };
+        document.getElementById(id).addEventListener(
+          eventName,
+          eventName === 'input' ? KSL.debounce(handler, 400) : handler
+        );
       });
       document.getElementById('taskForm').addEventListener('submit', submitTask);
+      document.getElementById('taskCommentButton').addEventListener('click', function () {
+        var taskId = document.getElementById('taskIdInput').value.trim();
+        var comment = document.getElementById('taskCommentInput').value.trim();
+        if (!taskId || !comment) {
+          KSL.showToast('Save the task first, then add a comment.', 'error');
+          return;
+        }
+        KSL.call('addTaskComment', KSL.getSessionToken(), { taskId: taskId, comment: comment })
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Unable to save comment.');
+            }
+            document.getElementById('taskCommentInput').value = '';
+            loadCollaboration(taskId);
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Unable to save comment.', 'error');
+          });
+      });
+      document.getElementById('taskAttachmentInput').addEventListener('change', function (event) {
+        var file = event.target.files && event.target.files[0];
+        var taskId = document.getElementById('taskIdInput').value.trim();
+        if (!file || !taskId) {
+          KSL.showToast('Save the task first, then upload an attachment.', 'error');
+          event.target.value = '';
+          return;
+        }
+        var reader = new FileReader();
+        reader.onload = function () {
+          var result = String(reader.result || '');
+          var base64 = result.indexOf(',') > -1 ? result.split(',')[1] : result;
+          KSL.callBusy('uploadTaskAttachment', KSL.getSessionToken(), {
+            taskId: taskId,
+            fileName: file.name,
+            mimeType: file.type,
+            base64: base64
+          })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Upload failed.');
+              }
+              event.target.value = '';
+              loadCollaboration(taskId);
+              KSL.showToast('Attachment uploaded.', 'success');
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Upload failed.', 'error');
+            });
+        };
+        reader.readAsDataURL(file);
+      });
       document.getElementById('tasksTableBody').addEventListener('click', function (event) {
         var button = event.target.closest('button[data-action]');
         if (!button) {
@@ -510,11 +653,51 @@
           return;
         }
         if (action === 'archive') {
-          archiveTask(taskId);
+          if (!window.confirm('Archive this task?')) {
+            return;
+          }
+          KSL.call('archiveTask', KSL.getSessionToken(), { taskId: taskId })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to archive task.');
+              }
+              KSL.showToast('Task archived.', 'success');
+              loadTasks();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to archive task.', 'error');
+            });
           return;
         }
         if (action === 'reopen') {
-          reopenTask(taskId);
+          if (!window.confirm('Reopen this task?')) {
+            return;
+          }
+          KSL.call('reopenTask', KSL.getSessionToken(), { taskId: taskId })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to reopen task.');
+              }
+              KSL.showToast('Task reopened.', 'success');
+              loadTasks();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to reopen task.', 'error');
+            });
+          return;
+        }
+        if (action === 'delete' && KSL.confirmDelete(button.dataset.name || taskId)) {
+          KSL.call('deleteTask', KSL.getSessionToken(), { taskId: taskId })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to delete task.');
+              }
+              KSL.showToast('Task deleted.', 'success');
+              loadTasks();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to delete task.', 'error');
+            });
         }
       });
     }

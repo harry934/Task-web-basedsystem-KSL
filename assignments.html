@@ -63,8 +63,9 @@
           <select id="assignmentTaskInput" class="select" required></select>
         </div>
         <div class="field">
-          <label for="assignmentEmployeeInput">Employee</label>
-          <select id="assignmentEmployeeInput" class="select" required></select>
+          <label for="assignmentEmployeeInput">Employees</label>
+          <select id="assignmentEmployeeInput" class="select" multiple required></select>
+          <p class="page-note">Hold Ctrl or Cmd to select more than one employee.</p>
         </div>
         <div class="field">
           <label>
@@ -136,9 +137,17 @@
             KSL.escapeHtml(String(item.employeeProgress || 0) + '%') +
             '</td><td>' +
             KSL.escapeHtml(KSL.formatDate(item.dueDate) || '-') +
-            '</td><td><button class="btn btn-outline" type="button" data-action="reassign" data-id="' +
+            '</td><td><div class="toolbar-left"><button class="btn btn-outline" type="button" data-action="reassign" data-id="' +
             KSL.escapeHtml(item.assignmentId) +
-            '">Reassign</button></td></tr>'
+            '">Reassign</button>' +
+            (KSL.isAdministrator()
+              ? '<button class="btn btn-danger" type="button" data-action="delete" data-id="' +
+                KSL.escapeHtml(item.assignmentId) +
+                '" data-name="' +
+                KSL.escapeHtml(item.assignmentId + ' / ' + (item.employeeName || '')) +
+                '">Delete</button>'
+              : '') +
+            '</div></td></tr>'
           );
         })
         .join('');
@@ -186,7 +195,7 @@
           state.meta.items || [],
           'employeeId',
           'fullName',
-          'Select employee'
+          ''
         );
         fillSelect(
           'assignmentTaskInput',
@@ -225,6 +234,7 @@
           document.getElementById('reassignAssignmentId').value = '';
           document.getElementById('assignmentModalTitle').textContent = 'Assign task';
           document.getElementById('assignmentTaskInput').disabled = false;
+          document.getElementById('assignmentEmployeeInput').multiple = true;
           KSL.openModal('assignmentModalBackdrop');
         });
         document.getElementById('assignmentsPendingButton').addEventListener('click', function () {
@@ -245,22 +255,51 @@
           loadAssignments();
         });
         document.getElementById('assignmentsTableBody').addEventListener('click', function (event) {
-          var button = event.target.closest('button[data-action="reassign"]');
+          var button = event.target.closest('button[data-action]');
           if (!button) {
+            return;
+          }
+          if (button.dataset.action === 'delete') {
+            if (!KSL.confirmDelete(button.dataset.name || button.dataset.id)) {
+              return;
+            }
+            KSL.call('deleteAssignment', KSL.getSessionToken(), { assignmentId: button.dataset.id })
+              .then(function (response) {
+                if (!response || !response.success) {
+                  throw new Error((response && response.message) || 'Delete failed.');
+                }
+                KSL.showToast('Assignment deleted.', 'success');
+                loadAssignments();
+              })
+              .catch(function (error) {
+                KSL.showToast(error.message || 'Delete failed.', 'error');
+              });
+            return;
+          }
+          if (button.dataset.action !== 'reassign') {
             return;
           }
           document.getElementById('reassignAssignmentId').value = button.dataset.id || '';
           document.getElementById('assignmentModalTitle').textContent = 'Reassign task';
           document.getElementById('assignmentTaskInput').disabled = true;
+          document.getElementById('assignmentEmployeeInput').multiple = false;
           KSL.openModal('assignmentModalBackdrop');
         });
         document.getElementById('assignmentForm').addEventListener('submit', function (event) {
           event.preventDefault();
           var reassignId = document.getElementById('reassignAssignmentId').value.trim();
+          var employeeSelect = document.getElementById('assignmentEmployeeInput');
+          var selectedIds = Array.prototype.slice
+            .call(employeeSelect.selectedOptions || [])
+            .map(function (option) {
+              return option.value;
+            })
+            .filter(Boolean);
           var payload = {
             assignmentId: reassignId,
             taskId: document.getElementById('assignmentTaskInput').value,
-            employeeId: document.getElementById('assignmentEmployeeInput').value,
+            employeeIds: selectedIds,
+            employeeId: selectedIds[0] || '',
             isPrimary: document.getElementById('assignmentPrimaryInput').checked
           };
           var fn = reassignId ? 'reassignTask' : 'createAssignment';
