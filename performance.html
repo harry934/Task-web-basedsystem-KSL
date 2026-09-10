@@ -1,0 +1,137 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Performance</h1>
+    <p>Evaluate employees using configurable productivity, timeliness, quality, and reliability weights.</p>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="generateEvalButton" class="btn btn-primary" type="button">Generate Evaluation</button>
+        <button id="exportEvalButton" class="btn btn-outline" type="button">Export</button>
+        <button id="exportEvalPdfButton" class="btn btn-outline" type="button">Export PDF</button>
+        <button id="refreshEvalButton" class="btn btn-outline" type="button">Refresh</button>
+      </div>
+      <div class="toolbar-right">
+        <input id="evalPeriodInput" class="input" type="month">
+        <input id="evalDepartmentFilter" class="input" type="search" placeholder="Department" style="min-width: 140px;">
+        <input id="evalSupervisorFilter" class="input" type="search" placeholder="Supervisor" style="min-width: 140px;">
+        <input id="evalEmployeeFilter" class="input" type="search" placeholder="Employee" style="min-width: 140px;">
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Employee</th>
+          <th>Department</th>
+          <th>Overall</th>
+          <th>Grade</th>
+          <th>Reviewed</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="evalTableBody"><tr><td colspan="7" class="empty-state">Loading...</td></tr></tbody>
+    </table>
+  </div>
+  <div id="evalPagination" class="pagination"></div>
+</section>
+<script>
+  (function () {
+    var state = { items: [], page: 1, pages: 1, pageSize: 25 };
+    function periodParts() {
+      var value = document.getElementById('evalPeriodInput').value || '';
+      var parts = value.split('-');
+      return { year: parts[0] || '', month: parts[1] || '', period: value };
+    }
+    function filters() {
+      var period = periodParts();
+      return {
+        period: period.period,
+        department: document.getElementById('evalDepartmentFilter').value.trim(),
+        supervisor: document.getElementById('evalSupervisorFilter').value.trim(),
+        employee: document.getElementById('evalEmployeeFilter').value.trim(),
+        page: state.page,
+        pageSize: state.pageSize
+      };
+    }
+    function load() {
+      KSL.call('listPerformance', KSL.getSessionToken(), filters()).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Failed to load performance.');
+        var payload = response.data || {};
+        state.items = payload.items || [];
+        state.page = Number((payload.pagination || {}).page || 1);
+        state.pages = Number((payload.pagination || {}).pages || 1);
+        var body = document.getElementById('evalTableBody');
+        if (!state.items.length) {
+          body.innerHTML = '<tr><td colspan="7" class="empty-state">No matching data found.</td></tr>';
+        } else {
+          body.innerHTML = state.items.map(function (item) {
+            return '<tr><td>' + KSL.escapeHtml(item.period) + '</td><td>' + KSL.escapeHtml(item.employeeName) +
+              '</td><td>' + KSL.escapeHtml(item.department || '-') + '</td><td>' + item.overall +
+              '</td><td><span class="status-badge ' + KSL.statusClass(item.grade) + '">' + KSL.escapeHtml(item.grade || '-') +
+              '</span></td><td>' + KSL.escapeHtml(item.reviewedBy || 'Pending') +
+              '</td><td><button class="btn btn-outline" type="button" data-id="' + KSL.escapeHtml(item.performanceId) +
+              '">Review</button></td></tr>';
+          }).join('');
+        }
+        KSL.renderPager('evalPagination', state, load);
+      }).catch(function (error) { KSL.showToast(error.message || 'Failed to load performance.', 'error'); });
+    }
+    function exportFile(format) {
+      var options = filters();
+      options.format = format;
+      KSL.callBusy('exportPerformance', KSL.getSessionToken(), options).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
+        KSL.downloadFile(response.data);
+        KSL.showToast('Report generated.', 'success');
+      }).catch(function (error) { KSL.showToast(error.message || 'Export failed.', 'error'); });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor'], function () {
+        var now = new Date();
+        document.getElementById('evalPeriodInput').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+        document.getElementById('generateEvalButton').addEventListener('click', function () {
+          KSL.callBusy('generatePerformance', KSL.getSessionToken(), periodParts()).then(function (response) {
+            if (!response || !response.success) throw new Error((response && response.message) || 'Generate failed.');
+            KSL.showToast(response.message || 'Evaluations generated.', 'success');
+            load();
+          }).catch(function (error) { KSL.showToast(error.message || 'Generate failed.', 'error'); });
+        });
+        document.getElementById('exportEvalButton').addEventListener('click', function () { exportFile('csv'); });
+        document.getElementById('exportEvalPdfButton').addEventListener('click', function () { exportFile('pdf'); });
+        document.getElementById('refreshEvalButton').addEventListener('click', load);
+        ['evalPeriodInput', 'evalDepartmentFilter', 'evalSupervisorFilter', 'evalEmployeeFilter'].forEach(function (id) {
+          document.getElementById(id).addEventListener(id === 'evalPeriodInput' ? 'change' : 'input', KSL.debounce(function () {
+            state.page = 1;
+            load();
+          }, 350));
+        });
+        document.getElementById('evalTableBody').addEventListener('click', function (event) {
+          var button = event.target.closest('button[data-id]');
+          if (!button) return;
+          var item = state.items.find(function (entry) { return entry.performanceId === button.dataset.id; }) || {};
+          var strengths = window.prompt('Strengths:', item.strengths || '') || '';
+          var areas = window.prompt('Areas for improvement:', item.areasForImprovement || '') || '';
+          var recommendations = window.prompt('Recommendations:', item.recommendations || '') || '';
+          var supervisorRating = Number(window.prompt('Supervisor rating (0-100):', String(item.supervisorRating || 0)) || 0);
+          var managementRating = Number(window.prompt('Management rating (0-100):', String(item.managementRating || 0)) || 0);
+          KSL.call('reviewPerformance', KSL.getSessionToken(), {
+            performanceId: button.dataset.id,
+            strengths: strengths,
+            areasForImprovement: areas,
+            recommendations: recommendations,
+            supervisorRating: supervisorRating,
+            managementRating: managementRating
+          }).then(function (response) {
+            if (!response || !response.success) throw new Error((response && response.message) || 'Review failed.');
+            KSL.showToast('Performance review saved.', 'success');
+            load();
+          }).catch(function (error) { KSL.showToast(error.message || 'Review failed.', 'error'); });
+        });
+        load();
+      });
+    });
+  })();
+</script>

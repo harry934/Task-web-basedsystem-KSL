@@ -30,6 +30,25 @@ var KSL_SLICE1_SCHEMAS = {
       'Updated Date'
     ]
   },
+  USER_CREDENTIALS: {
+    key: 'USER_CREDENTIALS',
+    sheetName: 'UserCredentials',
+    rangeName: 'RANGEUSERCREDENTIALS',
+    columns: [
+      'User ID',
+      'Username',
+      'Password Hash',
+      'Password Salt',
+      'Credential Status',
+      'Failed Attempts',
+      'Lockout Until',
+      'Last Login',
+      'Last Password Change',
+      'Created Date',
+      'Updated Date',
+      'Updated By'
+    ]
+  },
   DEPARTMENTS: {
     key: 'DEPARTMENTS',
     sheetName: 'Departments',
@@ -274,6 +293,172 @@ var KSL_SLICE1_SCHEMAS = {
       'Read Date',
       'Expiry Date'
     ]
+  },
+  TEAMS: {
+    key: 'TEAMS',
+    sheetName: 'Teams',
+    rangeName: 'RANGETEAMS',
+    columns: [
+      'Team ID',
+      'Team Name',
+      'Department',
+      'Team Leader',
+      'Team Description',
+      'Status',
+      'Created Date',
+      'Created By',
+      'Updated Date',
+      'Updated By'
+    ]
+  },
+  TASK_COMMENTS: {
+    key: 'TASK_COMMENTS',
+    sheetName: 'TaskComments',
+    rangeName: 'RANGETASKCOMMENTS',
+    columns: [
+      'Comment ID',
+      'Task ID',
+      'Employee ID',
+      'Employee Name',
+      'Comment',
+      'Comment Date',
+      'Comment Type',
+      'Parent Comment ID',
+      'Created Timestamp'
+    ]
+  },
+  TASK_ATTACHMENTS: {
+    key: 'TASK_ATTACHMENTS',
+    sheetName: 'TaskAttachments',
+    rangeName: 'RANGETASKATTACHMENTS',
+    columns: [
+      'Attachment ID',
+      'Task ID',
+      'Employee ID',
+      'Employee Name',
+      'File Name',
+      'File URL',
+      'File ID',
+      'MIME Type',
+      'File Size',
+      'Attachment Type',
+      'Uploaded Date',
+      'Uploaded By',
+      'Status'
+    ]
+  },
+  DAILY_PROGRESS: {
+    key: 'DAILY_PROGRESS',
+    sheetName: 'DailyProgress',
+    rangeName: 'RANGEDAILYPROGRESS',
+    columns: [
+      'Record ID',
+      'Date',
+      'Employee ID',
+      'Employee Name',
+      'Department',
+      'Supervisor',
+      'Tasks Assigned',
+      'Tasks Started',
+      'Tasks Completed',
+      'Tasks In Progress',
+      'Tasks Overdue',
+      'Total Hours',
+      'Average Progress %',
+      'Completion Rate',
+      'Performance Score',
+      'Supervisor Remarks',
+      'Generated Date'
+    ]
+  },
+  WEEKLY_PROGRESS: {
+    key: 'WEEKLY_PROGRESS',
+    sheetName: 'WeeklyProgress',
+    rangeName: 'RANGEWEEKLYPROGRESS',
+    columns: [
+      'Record ID',
+      'Week Start',
+      'Week End',
+      'Employee ID',
+      'Employee Name',
+      'Department',
+      'Supervisor',
+      'Tasks Assigned',
+      'Tasks Completed',
+      'Tasks In Progress',
+      'Tasks Overdue',
+      'Total Hours',
+      'Average Progress %',
+      'Completion Rate',
+      'Productivity Score',
+      'Quality Score',
+      'Timeliness Score',
+      'Overall Performance Score',
+      'Supervisor Comments',
+      'Generated Date'
+    ]
+  },
+  MONTHLY_PROGRESS: {
+    key: 'MONTHLY_PROGRESS',
+    sheetName: 'MonthlyProgress',
+    rangeName: 'RANGEMONTHLYPROGRESS',
+    columns: [
+      'Record ID',
+      'Month',
+      'Year',
+      'Employee ID',
+      'Employee Name',
+      'Department',
+      'Supervisor',
+      'Tasks Assigned',
+      'Tasks Completed',
+      'Tasks In Progress',
+      'Tasks Overdue',
+      'Total Hours',
+      'Average Progress %',
+      'Completion Rate',
+      'Productivity Score',
+      'Quality Score',
+      'Timeliness Score',
+      'Reliability Score',
+      'Overall Performance Score',
+      'Supervisor Comments',
+      'Management Comments',
+      'Generated Date'
+    ]
+  },
+  PERFORMANCE: {
+    key: 'PERFORMANCE',
+    sheetName: 'Performance',
+    rangeName: 'RANGEPERFORMANCE',
+    columns: [
+      'Performance ID',
+      'Evaluation Period',
+      'Employee ID',
+      'Employee Name',
+      'Department',
+      'Supervisor',
+      'Tasks Assigned',
+      'Tasks Completed',
+      'Tasks Overdue',
+      'Completion Rate',
+      'On-Time Completion Rate',
+      'Average Progress',
+      'Total Hours',
+      'Productivity Score',
+      'Timeliness Score',
+      'Quality Score',
+      'Reliability Score',
+      'Supervisor Rating',
+      'Management Rating',
+      'Overall Score',
+      'Performance Grade',
+      'Strengths',
+      'Areas for Improvement',
+      'Recommendations',
+      'Review Date',
+      'Reviewed By'
+    ]
   }
 };
 
@@ -294,6 +479,7 @@ function bootstrapMvpSlice1Database() {
 
   seedDimensionsDefaults_();
   seedSettingsDefaults_();
+  ensureMissingSettings_();
 
   return {
     success: true,
@@ -441,6 +627,50 @@ function seedSettingsDefaults_() {
   var updatedBy = 'system-bootstrap';
   var settings = [
     [
+      'AUTH_MODE',
+      'PASSWORD',
+      'Authentication',
+      'Text',
+      'Authentication mode for this deployment.',
+      'FALSE',
+      'Active',
+      updatedDate,
+      updatedBy
+    ],
+    [
+      'PASSWORD_MIN_LENGTH',
+      '8',
+      'Authentication',
+      'Number',
+      'Minimum password length for username/password authentication.',
+      'TRUE',
+      'Active',
+      updatedDate,
+      updatedBy
+    ],
+    [
+      'PASSWORD_MAX_FAILED_ATTEMPTS',
+      '5',
+      'Authentication',
+      'Number',
+      'Failed login attempts allowed before temporary lockout.',
+      'TRUE',
+      'Active',
+      updatedDate,
+      updatedBy
+    ],
+    [
+      'PASSWORD_LOCKOUT_MINUTES',
+      '15',
+      'Authentication',
+      'Number',
+      'Temporary lockout duration in minutes after too many failed attempts.',
+      'TRUE',
+      'Active',
+      updatedDate,
+      updatedBy
+    ],
+    [
       'APP_TITLE',
       'Kenya Shipyards Limited Tasks Management System',
       'General',
@@ -518,30 +748,56 @@ function seedSettingsDefaults_() {
       updatedBy
     ],
     [
-      'ALLOW_EFFECTIVE_USER_FALLBACK',
+      'REQUIRE_COMPLETION_NOTES',
       'TRUE',
-      'Security',
+      'Workflow',
       'Boolean',
-      'Allow fallback to Session.getEffectiveUser email when active user email is not available.',
-      'TRUE',
-      'Active',
-      updatedDate,
-      updatedBy
-    ],
-    [
-      'GOOGLE_CLIENT_ID',
-      '',
-      'Authentication',
-      'Text',
-      'Google Identity Services web client ID.',
+      'Require completion notes when a task is marked completed.',
       'TRUE',
       'Active',
       updatedDate,
       updatedBy
     ]
-  ];
+  ].concat(getPerformanceSettingSeedRows_(updatedDate, updatedBy));
 
   sheet.getRange(2, 1, settings.length, schema.columns.length).setValues(settings);
+}
+
+function getPerformanceSettingSeedRows_(updatedDate, updatedBy) {
+  return [
+    ['WEIGHT_PRODUCTIVITY', '25', 'Performance', 'Number', 'Weight for productivity score.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['WEIGHT_TIMELINESS', '25', 'Performance', 'Number', 'Weight for timeliness score.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['WEIGHT_QUALITY', '25', 'Performance', 'Number', 'Weight for quality score.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['WEIGHT_RELIABILITY', '25', 'Performance', 'Number', 'Weight for reliability score.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['GRADE_EXCELLENT_MIN', '85', 'Performance', 'Number', 'Minimum overall score for Excellent.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['GRADE_GOOD_MIN', '70', 'Performance', 'Number', 'Minimum overall score for Good.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['GRADE_SATISFACTORY_MIN', '55', 'Performance', 'Number', 'Minimum overall score for Satisfactory.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['DEFAULT_PAGE_SIZE', '25', 'Interface', 'Number', 'Default pagination page size.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['REPORT_ORG_NAME', 'Kenya Shipyards Limited', 'Reports', 'Text', 'Organization name used on printed and PDF reports.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['MAX_ATTACHMENT_MB', '8', 'Workflow', 'Number', 'Maximum attachment size in megabytes.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['REQUIRE_DELAY_REASON', 'TRUE', 'Workflow', 'Boolean', 'Require a delay reason when a task is delayed or overdue.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['REQUIRE_BLOCKER_DESCRIPTION', 'TRUE', 'Workflow', 'Boolean', 'Require a blocker description when a task is blocked.', 'TRUE', 'Active', updatedDate, updatedBy]
+  ];
+}
+
+function ensureMissingSettings_() {
+  var schema = resolveSchema_('SETTINGS');
+  var sheet = getSheetBySchema_(schema);
+  var existing = {};
+  readSheetRecords_(schema).forEach(function (record) {
+    existing[normalizeString_(record['Setting Key'])] = true;
+  });
+  var now = new Date();
+  var rows = getPerformanceSettingSeedRows_(now, 'system-bootstrap').filter(function (row) {
+    return !existing[normalizeString_(row[0])];
+  });
+  rows.forEach(function (row) {
+    var record = {};
+    schema.columns.forEach(function (column, index) {
+      record[column] = row[index];
+    });
+    appendSheetRecord_(sheet, schema.columns, record);
+  });
 }
 
 function getDimensionSeedMap_() {
@@ -573,71 +829,19 @@ function getMaxSeedLength_(seedMap) {
 }
 
 function bootstrapFirstAdminUser(firstAdminInput) {
-  var schema = KSL_SLICE1_SCHEMAS.USERS;
   var data = firstAdminInput || {};
-  var now = new Date();
-  var sheet = getDatabaseSpreadsheet_().getSheetByName(schema.sheetName);
-  var existingUsers = readSheetRecords_(schema);
-  var googleSubjectId = String(data.googleSubjectId || '').trim();
-  var email = String(data.email || '').trim().toLowerCase();
-
-  if (!googleSubjectId || !email) {
-    throw new Error('googleSubjectId and email are required to bootstrap the first admin user.');
+  var userBootstrap = bootstrapFirstAdminByEmail(data);
+  if (normalizeString_(data.username) && normalizeString_(data.password)) {
+    bootstrapFirstAdminCredentials({
+      userId: userBootstrap && userBootstrap.data && userBootstrap.data.userId,
+      email: data.email,
+      username: data.username,
+      password: data.password,
+      fullName: data.fullName
+    });
+    userBootstrap.message = 'First administrator bootstrapped with local credentials.';
   }
-
-  var alreadyExists = existingUsers.some(function (record) {
-    return (
-      String(record['Google Subject ID'] || '') === googleSubjectId ||
-      String(record['Google Email'] || '').toLowerCase() === email
-    );
-  });
-
-  if (alreadyExists) {
-    return {
-      success: true,
-      message: 'Admin user already exists.',
-      data: {
-        email: email
-      }
-    };
-  }
-
-  var userId = generateSequenceId_('USR');
-  var record = {
-    'User ID': userId,
-    'Google Subject ID': googleSubjectId,
-    'Google Email': email,
-    'Email Verified': 'TRUE',
-    'Full Name': data.fullName || email,
-    'Given Name': data.givenName || '',
-    'Family Name': data.familyName || '',
-    'Profile Photo': data.profilePhoto || '',
-    'Hosted Domain': data.hostedDomain || '',
-    'Employee ID': data.employeeId || '',
-    Department: data.department || '',
-    'Job Title': data.jobTitle || 'Administrator',
-    Role: 'Administrator',
-    'Supervisor ID': '',
-    'Account Status': 'Active',
-    'First Login': now,
-    'Last Login': now,
-    'Last Activity': now,
-    'Created By': 'system-bootstrap',
-    'Created Date': now,
-    'Updated By': 'system-bootstrap',
-    'Updated Date': now
-  };
-
-  appendSheetRecord_(sheet, schema.columns, record);
-
-  return {
-    success: true,
-    message: 'First administrator bootstrapped.',
-    data: {
-      userId: userId,
-      email: email
-    }
-  };
+  return userBootstrap;
 }
 
 function bootstrapFirstAdminByEmail(firstAdminInput) {
@@ -671,7 +875,7 @@ function bootstrapFirstAdminByEmail(firstAdminInput) {
 
     return {
       success: true,
-      message: 'Existing user upgraded to active administrator. Sign in with the same email.',
+      message: 'Existing user upgraded to active administrator. Run bootstrapFirstAdminCredentials if credentials are not set.',
       data: {
         userId: updated['User ID'],
         email: email
@@ -709,10 +913,306 @@ function bootstrapFirstAdminByEmail(firstAdminInput) {
 
   return {
     success: true,
-    message: 'Administrator bootstrapped by email. On first login, Google subject will auto-link.',
+    message: 'Administrator bootstrapped by email. Next run bootstrapFirstAdminCredentials to set username/password.',
     data: {
       userId: userId,
       email: email
     }
   };
+}
+
+function bootstrapFirstAdminCredentials(firstAdminInput) {
+  var data = firstAdminInput || {};
+  var email = normalizeEmail_(data.email);
+  var userId = normalizeString_(data.userId);
+  var username = normalizeUsername_(data.username);
+  var password = String(data.password || '');
+
+  if (!username || !password) {
+    throw new Error('username and password are required.');
+  }
+
+  var userRecord = null;
+  if (userId) {
+    userRecord = getUserRecordByUserId_(userId);
+  }
+  if (!userRecord && email) {
+    userRecord = getUserRecordByEmail_(email);
+  }
+  if (!userRecord) {
+    throw new Error('Admin user was not found. Run bootstrapFirstAdminByEmail first.');
+  }
+
+  var schema = resolveSchema_('USERS');
+  var sheet = getSheetBySchema_(schema);
+  var updated = Object.assign({}, userRecord);
+  updated.Role = 'Administrator';
+  updated['Account Status'] = 'Active';
+  updated['Updated By'] = 'system-bootstrap';
+  updated['Updated Date'] = new Date();
+  if (!normalizeString_(updated['Full Name'])) {
+    updated['Full Name'] = data.fullName || deriveNameFromUsername_(username);
+  }
+  if (email) {
+    updated['Google Email'] = email;
+  }
+  updateSheetRecordByRow_(sheet, userRecord.__rowNumber, schema.columns, updated);
+  setUserCredentialSafely_(updated['User ID'], username, password, 'system-bootstrap');
+
+  return {
+    success: true,
+    message: 'Administrator local credentials are ready.',
+    data: {
+      userId: normalizeString_(updated['User ID']),
+      username: username
+    }
+  };
+}
+
+function setUserCredentialSafely_(userId, username, password, actorId) {
+  if (typeof setUserCredential_ === 'function') {
+    return setUserCredential_(userId, username, password, actorId);
+  }
+  if (typeof setCredentialPassword_ === 'function') {
+    return setCredentialPassword_(userId, username, password, actorId);
+  }
+  throw new Error(
+    'Credential helper was not found. Copy the latest gscommon.gs file, save, and run again.'
+  );
+}
+
+function recoverAdminAccess(firstAdminInput) {
+  var data = firstAdminInput || {};
+  var email = normalizeEmail_(data.email);
+  var username = normalizeUsername_(data.username);
+  var password = String(data.password || '');
+  var disableOtherMatches = data.disableOtherMatches !== false;
+
+  if (!email || !username || !password) {
+    throw new Error('email, username, and password are required for admin recovery.');
+  }
+
+  bootstrapFirstAdminByEmail(data);
+
+  var schema = resolveSchema_('USERS');
+  var sheet = getSheetBySchema_(schema);
+  var users = readSheetRecords_(schema);
+  var matches = users.filter(function (record) {
+    return normalizeEmail_(record['Google Email']) === email;
+  });
+  if (!matches.length) {
+    throw new Error('No user matched the provided email during admin recovery.');
+  }
+
+  var credentialMatch = getUserCredentialRecordByUsername_(username);
+  var targetUserId = normalizeString_(credentialMatch && credentialMatch['User ID']);
+  var target = null;
+  if (targetUserId) {
+    target = users.find(function (record) {
+      return normalizeString_(record['User ID']) === targetUserId;
+    }) || null;
+  }
+  if (!target) {
+    target = matches[0];
+  }
+
+  var now = new Date();
+  var updatedTarget = Object.assign({}, target);
+  updatedTarget['Google Email'] = email;
+  updatedTarget['Email Verified'] = 'TRUE';
+  updatedTarget['Full Name'] = data.fullName || updatedTarget['Full Name'] || email;
+  updatedTarget['Employee ID'] = data.employeeId || updatedTarget['Employee ID'] || '';
+  updatedTarget.Department = data.department || updatedTarget.Department || '';
+  updatedTarget['Job Title'] = data.jobTitle || updatedTarget['Job Title'] || 'Administrator';
+  updatedTarget.Role = 'Administrator';
+  updatedTarget['Account Status'] = 'Active';
+  updatedTarget['Updated By'] = 'system-recovery';
+  updatedTarget['Updated Date'] = now;
+  updatedTarget['Last Activity'] = now;
+  updateSheetRecordByRow_(sheet, target.__rowNumber, schema.columns, updatedTarget);
+
+  setUserCredentialSafely_(
+    normalizeString_(updatedTarget['User ID']),
+    username,
+    password,
+    'system-recovery'
+  );
+
+  var disabledUsers = [];
+  if (disableOtherMatches) {
+    matches.forEach(function (record) {
+      var recordUserId = normalizeString_(record['User ID']);
+      if (recordUserId === normalizeString_(updatedTarget['User ID'])) {
+        return;
+      }
+      var duplicate = Object.assign({}, record);
+      duplicate['Account Status'] = 'Disabled';
+      duplicate['Updated By'] = 'system-recovery';
+      duplicate['Updated Date'] = now;
+      updateSheetRecordByRow_(sheet, record.__rowNumber, schema.columns, duplicate);
+      disabledUsers.push(recordUserId);
+    });
+  }
+
+  return {
+    success: true,
+    message:
+      'Admin recovery complete. Sign out from all sessions, then sign in again with the recovered username.',
+    data: {
+      userId: normalizeString_(updatedTarget['User ID']),
+      username: username,
+      email: email,
+      disabledDuplicateUserIds: disabledUsers
+    }
+  };
+}
+
+function runAdminSetup() {
+  // Temporary bootstrap credentials. Change password after first successful login.
+  return recoverAdminAccess({
+    email: 'innovatehubke@gmail.com',
+    fullName: 'System Administrator',
+    employeeId: 'EMP-001',
+    department: 'Engineering',
+    jobTitle: 'Administrator',
+    username: 'innovatehubke.admin',
+    password: 'KslAdmin2026',
+    disableOtherMatches: true
+  });
+}
+
+function removeUserAccountByIdentity(identityInput) {
+  var data = identityInput || {};
+  var username = normalizeUsername_(data.username);
+  var email = normalizeEmail_(data.email);
+  var fullName = normalizeString_(data.fullName).toLowerCase();
+  var role = normalizeString_(data.role).toLowerCase();
+
+  if (!username && !email && !fullName) {
+    throw new Error('Provide at least one identifier: username, email, or fullName.');
+  }
+
+  var usersSchema = resolveSchema_('USERS');
+  var usersSheet = getSheetBySchema_(usersSchema);
+  var users = readSheetRecords_(usersSchema);
+
+  var credentialsSchema = resolveSchema_('USER_CREDENTIALS');
+  var credentialsSheet = getSheetBySchema_(credentialsSchema);
+  var credentials = readSheetRecords_(credentialsSchema);
+
+  var userIdsByUsername = {};
+  if (username) {
+    credentials.forEach(function (record) {
+      if (normalizeUsername_(record.Username) === username) {
+        userIdsByUsername[normalizeString_(record['User ID'])] = true;
+      }
+    });
+  }
+
+  var usersToDelete = users.filter(function (record) {
+    var userId = normalizeString_(record['User ID']);
+    var matches = true;
+
+    if (username) {
+      matches = matches && Boolean(userIdsByUsername[userId]);
+    }
+    if (email) {
+      matches = matches && normalizeEmail_(record['Google Email']) === email;
+    }
+    if (fullName) {
+      matches = matches && normalizeString_(record['Full Name']).toLowerCase() === fullName;
+    }
+    if (role) {
+      matches = matches && normalizeString_(record.Role).toLowerCase() === role;
+    }
+
+    return matches;
+  });
+
+  if (!usersToDelete.length) {
+    throw new Error('No user matched the provided identity filters.');
+  }
+
+  var userIdsToDelete = {};
+  usersToDelete.forEach(function (record) {
+    userIdsToDelete[normalizeString_(record['User ID'])] = true;
+  });
+
+  var credentialsToDelete = credentials.filter(function (record) {
+    var userId = normalizeString_(record['User ID']);
+    if (userIdsToDelete[userId]) {
+      return true;
+    }
+    if (username && normalizeUsername_(record.Username) === username) {
+      return true;
+    }
+    return false;
+  });
+
+  deleteRowsByNumberDesc_(usersSheet, usersToDelete.map(function (record) {
+    return record.__rowNumber;
+  }));
+
+  deleteRowsByNumberDesc_(credentialsSheet, credentialsToDelete.map(function (record) {
+    return record.__rowNumber;
+  }));
+
+  EXECUTION_USERS_CACHE_ = null;
+  EXECUTION_CREDENTIALS_CACHE_ = null;
+
+  writeAuditLog_(
+    { userId: 'system-recovery', fullName: 'System Recovery' },
+    'DELETE',
+    'Users',
+    usersToDelete.map(function (record) {
+      return normalizeString_(record['User ID']);
+    }).join(','),
+    'Recovery cleanup removed user accounts.',
+    '',
+    {
+      usersRemoved: usersToDelete.length,
+      credentialsRemoved: credentialsToDelete.length,
+      username: username,
+      email: email,
+      fullName: fullName
+    }
+  );
+
+  return {
+    success: true,
+    message: 'User account cleanup completed.',
+    data: {
+      usersRemoved: usersToDelete.length,
+      credentialsRemoved: credentialsToDelete.length,
+      removedUserIds: usersToDelete.map(function (record) {
+        return normalizeString_(record['User ID']);
+      })
+    }
+  };
+}
+
+function deleteRowsByNumberDesc_(sheet, rowNumbers) {
+  var rows = (rowNumbers || [])
+    .map(function (value) {
+      return Number(value || 0);
+    })
+    .filter(function (value) {
+      return value > 1;
+    })
+    .sort(function (left, right) {
+      return right - left;
+    });
+
+  rows.forEach(function (rowNumber) {
+    sheet.deleteRow(rowNumber);
+  });
+}
+
+function runRemoveAccidentalHarryAccount() {
+  return removeUserAccountByIdentity({
+    username: 'innovatehubke.admin',
+    fullName: 'Harry Mokaya',
+    email: 'harry@gmail.com',
+    role: 'Employee'
+  });
 }

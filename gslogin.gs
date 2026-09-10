@@ -2,6 +2,7 @@ function getLoginConfiguration() {
   return successResponse_('Login configuration loaded.', {
     appTitle: getAppTitle_(),
     scriptUrl: getScriptUrl(),
-    googleClientId: getGoogleClientId_()
+    authMode: getSettingValue_('AUTH_MODE', 'PASSWORD'),
+    minPasswordLength: getPasswordMinLength_()
   });
 }

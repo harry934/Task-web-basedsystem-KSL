@@ -8,6 +8,8 @@ function listMonitoredTasks(sessionToken, options) {
     var filters = options || {};
     var view = normalizeString_(filters.view).toLowerCase() || 'all';
     var departmentFilter = normalizeString_(filters.department).toLowerCase();
+    var teamFilter = normalizeString_(filters.team).toLowerCase();
+    var assigneeFilter = normalizeString_(filters.assignee).toLowerCase();
     var query = normalizeString_(filters.query).toLowerCase();
     var page = normalizeNumber_(filters.page, 1);
     var pageSize = normalizeNumber_(filters.pageSize, 25);
@@ -34,6 +36,12 @@ function listMonitoredTasks(sessionToken, options) {
       })
       .filter(function (item) {
         if (departmentFilter && normalizeString_(item.department).toLowerCase() !== departmentFilter) {
+          return false;
+        }
+        if (teamFilter && normalizeString_(item.team).toLowerCase() !== teamFilter) {
+          return false;
+        }
+        if (assigneeFilter && normalizeString_(item.primaryAssigneeName).toLowerCase().indexOf(assigneeFilter) === -1) {
           return false;
         }
         if (view !== 'all' && item.monitorFlag !== view) {
@@ -68,5 +76,36 @@ function listMonitoredTasks(sessionToken, options) {
     return successResponse_('Monitoring list loaded.', paged);
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load monitoring view.');
+  }
+}
+
+function getMonitoredTaskDetail(sessionToken, payload) {
+  try {
+    requireSession_(sessionToken, ['Administrator', 'Manager', 'Supervisor', 'Team Leader'], 'monitoring');
+    var taskId = normalizeString_(payload && payload.taskId);
+    if (!taskId) {
+      throw new Error('taskId is required.');
+    }
+    var collaboration = listTaskCollaboration(sessionToken, { taskId: taskId, page: 'monitoring' });
+    var assignments = safeReadSheetRecords_('TASK_ASSIGNMENTS')
+      .filter(function (record) {
+        return normalizeString_(record['Task ID']) === taskId;
+      })
+      .map(mapAssignmentForResponse_);
+    var updates = safeReadSheetRecords_('TASK_UPDATES')
+      .filter(function (record) {
+        return normalizeString_(record['Task ID']) === taskId;
+      })
+      .map(mapProgressForResponse_);
+    return successResponse_('Task detail loaded.', {
+      task: mapTaskForResponse_(findTaskRecord_(taskId) || {}),
+      assignments: assignments,
+      updates: updates,
+      comments: (collaboration.data && collaboration.data.comments) || [],
+      attachments: (collaboration.data && collaboration.data.attachments) || [],
+      history: (collaboration.data && collaboration.data.history) || []
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to load task detail.');
   }
 }

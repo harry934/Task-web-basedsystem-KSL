@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>User Management</h1>
-    <p>Review and manage account approval, roles, and access status.</p>
+    <p>Login accounts for username/password access. Use Employees for assignment master-data and approve user access here.</p>
   </div>
 
   <div class="card">
@@ -28,6 +28,7 @@
     <table>
       <thead>
         <tr>
+          <th>Username</th>
           <th>Name</th>
           <th>Email</th>
           <th>Role</th>
@@ -39,7 +40,7 @@
       </thead>
       <tbody id="usersTableBody">
         <tr>
-          <td colspan="7" class="empty-state">Loading users...</td>
+          <td colspan="8" class="empty-state">Loading users...</td>
         </tr>
       </tbody>
     </table>
@@ -131,7 +132,7 @@
       }
 
       if (!state.users.length) {
-        body.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fa-solid fa-users"></i><p>No users found.</p></td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="empty-state"><i class="fa-solid fa-users"></i><p>No users found.</p></td></tr>';
         return;
       }
 
@@ -146,6 +147,11 @@
                 '"><i class="fa-solid fa-user-check"></i>Approve</button>'
             );
           }
+          actions.push(
+            '<button class="btn btn-outline" type="button" data-action="password" data-user-id="' +
+              KSL.escapeHtml(user.userId) +
+              '">Set Password</button>'
+          );
           actions.push(
             '<button class="btn btn-outline" type="button" data-action="status" data-status="Active" data-user-id="' +
               KSL.escapeHtml(user.userId) +
@@ -164,6 +170,9 @@
 
           return (
             '<tr>' +
+            '<td>' +
+            KSL.escapeHtml(user.username || '-') +
+            '</td>' +
             '<td>' +
             KSL.escapeHtml(user.fullName) +
             '</td>' +
@@ -310,6 +319,73 @@
         });
     }
 
+    function suggestUsername(user) {
+      if (user && user.username) {
+        return user.username;
+      }
+      var email = user && user.email ? String(user.email) : '';
+      if (!email) {
+        return '';
+      }
+      return email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    }
+
+    function resetPassword(userId) {
+      var target = state.users.find(function (user) {
+        return user.userId === userId;
+      });
+      if (!target) {
+        KSL.showToast('User not found.', 'error');
+        return;
+      }
+
+      var username = window.prompt('Username for this account:', suggestUsername(target));
+      if (username === null) {
+        return;
+      }
+      username = String(username || '').trim().toLowerCase();
+      if (!username) {
+        KSL.showToast('Username is required.', 'error');
+        return;
+      }
+
+      var newPassword = window.prompt(
+        'Enter a new temporary password (must include uppercase, lowercase, and a number):',
+        ''
+      );
+      if (newPassword === null) {
+        return;
+      }
+      if (!newPassword) {
+        KSL.showToast('Password is required.', 'error');
+        return;
+      }
+      var confirmPassword = window.prompt('Confirm the new password:', '');
+      if (confirmPassword === null) {
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        KSL.showToast('Passwords do not match.', 'error');
+        return;
+      }
+
+      KSL.callBusy('adminResetUserPassword', KSL.getSessionToken(), {
+        userId: userId,
+        username: username,
+        newPassword: newPassword
+      })
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Password reset failed.');
+          }
+          KSL.showToast('Password updated.', 'success');
+          loadUsers();
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Password reset failed.', 'error');
+        });
+    }
+
     function bindTableActions() {
       var body = document.getElementById('usersTableBody');
       if (!body) {
@@ -324,6 +400,10 @@
         var userId = button.dataset.userId || '';
         if (action === 'approve') {
           openApprovalModal(userId);
+          return;
+        }
+        if (action === 'password') {
+          resetPassword(userId);
           return;
         }
         if (action === 'status') {

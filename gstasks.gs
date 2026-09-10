@@ -8,6 +8,10 @@ function listTasks(sessionToken, options) {
     var statusFilter = normalizeString_(filters.status).toLowerCase();
     var priorityFilter = normalizeString_(filters.priority).toLowerCase();
     var departmentFilter = normalizeString_(filters.department).toLowerCase();
+    var teamFilter = normalizeString_(filters.team).toLowerCase();
+    var sectionFilter = normalizeString_(filters.section).toLowerCase();
+    var categoryFilter = normalizeString_(filters.taskCategory || filters.category).toLowerCase();
+    var typeFilter = normalizeString_(filters.taskType || filters.type).toLowerCase();
     var recordStatusFilter = normalizeString_(filters.recordStatus).toLowerCase() || 'active';
     var page = normalizeNumber_(filters.page, 1);
     var pageSize = normalizeNumber_(filters.pageSize, 25);
@@ -25,7 +29,11 @@ function listTasks(sessionToken, options) {
           record.Department,
           record.Priority,
           record.Status,
-          record['Primary Assignee Name']
+          record['Primary Assignee Name'],
+          record.Team,
+          record.Section,
+          record['Task Category'],
+          record['Task Type']
         ]
           .join(' ')
           .toLowerCase();
@@ -40,6 +48,18 @@ function listTasks(sessionToken, options) {
           return false;
         }
         if (departmentFilter && department !== departmentFilter) {
+          return false;
+        }
+        if (teamFilter && normalizeString_(record.Team).toLowerCase() !== teamFilter) {
+          return false;
+        }
+        if (sectionFilter && normalizeString_(record.Section).toLowerCase() !== sectionFilter) {
+          return false;
+        }
+        if (categoryFilter && normalizeString_(record['Task Category']).toLowerCase() !== categoryFilter) {
+          return false;
+        }
+        if (typeFilter && normalizeString_(record['Task Type']).toLowerCase() !== typeFilter) {
           return false;
         }
         if (query && searchableText.indexOf(query) === -1) {
@@ -60,7 +80,7 @@ function listTasks(sessionToken, options) {
 
 function getTaskFormMetadata(sessionToken) {
   try {
-    requireSession_(sessionToken, TASK_ACCESS_ROLES, 'tasks');
+    var authContext = requireSession_(sessionToken, TASK_ACCESS_ROLES, 'tasks');
     var dimensions = getDimensionValuesMap_();
     var departments = readSheetRecords_('DEPARTMENTS')
       .filter(function (record) {
@@ -73,12 +93,33 @@ function getTaskFormMetadata(sessionToken) {
         };
       });
 
+    var teams = safeReadSheetRecords_('TEAMS')
+      .filter(function (record) {
+        return normalizeString_(record.Status).toLowerCase() === 'active';
+      })
+      .map(function (record) {
+        return normalizeString_(record['Team Name']);
+      });
+    var parentTasks = applyTaskScopeForUser_(safeReadSheetRecords_('TASKS'), authContext.user)
+      .filter(function (record) {
+        return normalizeString_(record['Record Status'] || 'Active').toLowerCase() !== 'archived';
+      })
+      .map(function (record) {
+        return {
+          taskId: normalizeString_(record['Task ID']),
+          taskTitle: normalizeString_(record['Task Title'])
+        };
+      });
     return successResponse_('Task form metadata loaded.', {
       priorities: dimensions.Priorities || [],
       statuses: dimensions['Task Statuses'] || [],
       categories: dimensions['Task Categories'] || [],
       taskTypes: dimensions['Task Types'] || [],
-      departments: departments
+      sections: dimensions.Sections || [],
+      delayReasons: dimensions['Delay Reasons'] || [],
+      teams: teams.length ? teams : dimensions.Teams || [],
+      departments: departments,
+      parentTasks: parentTasks
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load task form metadata.');
@@ -104,11 +145,14 @@ function createTask(sessionToken, payload) {
     validateTaskDates_(startDate, dueDate);
     validateTaskNumbers_(progress, estimatedHours, actualHours);
     validateTaskDimensionValues_(input);
+    validateParentTask_(input.parentTaskId, '');
+    validatePrimaryAssignee_(input.primaryAssignee);
 
     var normalizedStatus = normalizeString_(input.status || 'Assigned');
     if (progress >= 100) {
       normalizedStatus = 'Completed';
     }
+    enforceTaskCompletionRules_(normalizedStatus, progress, input.completionNotes);
 
     var record = {
       'Task ID': taskId,
@@ -128,7 +172,7 @@ function createTask(sessionToken, payload) {
       'Assigned Date': now,
       'Start Date': startDate,
       'Due Date': dueDate,
-      'Completed Date': progress >= 100 ? now : null,
+      'Completed Date': normalizeString_(normalizedStatus).toLowerCase() === 'completed' ? now : null,
       'Estimated Hours': estimatedHours,
       'Actual Hours': actualHours,
       'Assigned By': authContext.user.userId,
@@ -157,7 +201,17 @@ function createTask(sessionToken, payload) {
     };
 
     applyTaskDerivedFields_(record);
+    enforceDelayAndBlockerRules_(record);
     appendSheetRecord_(sheet, schema.columns, record);
+    writeTaskHistory_(
+      authContext.user,
+      taskId,
+      'CREATE',
+      'Task Record',
+      '',
+      mapTaskForResponse_(record),
+      'Task created.'
+    );
 
     writeAuditLog_(
       authContext.user,
@@ -294,9 +348,27 @@ function updateTask(sessionToken, payload) {
     ) {
       updated['Completed Date'] = null;
     }
+    var wasCompletedBefore = normalizeString_(currentRecord.Status).toLowerCase() === 'completed';
+    var completionFieldsTouched =
+      input.status !== undefined || input.progress !== undefined || input.completionNotes !== undefined;
+    if (!wasCompletedBefore || completionFieldsTouched) {
+      enforceTaskCompletionRules_(updated.Status, progress, updated['Completion Notes']);
+    }
+    validateParentTask_(updated['Parent Task ID'], taskId);
+    validatePrimaryAssignee_(updated['Primary Assignee']);
 
     applyTaskDerivedFields_(updated);
+    enforceDelayAndBlockerRules_(updated);
     updateSheetRecordByRow_(sheet, currentRecord.__rowNumber, schema.columns, updated);
+    writeTaskHistory_(
+      authContext.user,
+      taskId,
+      'UPDATE',
+      'Task Record',
+      previous,
+      mapTaskForResponse_(updated),
+      'Task details updated.'
+    );
 
     writeAuditLog_(
       authContext.user,
@@ -326,6 +398,33 @@ function archiveTask(sessionToken, payload) {
     return setTaskRecordStatus_(authContext.user, taskId, 'Archived', 'Archived', 'ARCHIVE');
   } catch (error) {
     return errorResponse_(error.message || 'Failed to archive task.');
+  }
+}
+
+function deleteTask(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'tasks');
+    var taskId = normalizeString_(payload && payload.taskId);
+    if (!taskId) {
+      throw new Error('taskId is required.');
+    }
+    return withScriptLock_(function () {
+      var schema = resolveSchema_('TASKS');
+      var sheet = getSheetBySchema_(schema);
+      var tasks = readSheetRecords_(schema);
+      var target = tasks.find(function (record) {
+        return normalizeString_(record['Task ID']) === taskId;
+      });
+      if (!target) {
+        throw new Error('Task was not found.');
+      }
+      var previous = mapTaskForResponse_(target);
+      deleteRowsByNumberDesc_(sheet, [target.__rowNumber]);
+      writeAuditLog_(authContext.user, 'DELETE', 'Tasks', taskId, 'Permanently deleted task.', previous, '');
+      return successResponse_('Task deleted permanently.', { taskId: taskId });
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to delete task.');
   }
 }
 
@@ -364,6 +463,15 @@ function setTaskRecordStatus_(actor, taskId, recordStatus, taskStatus, auditActi
   }
   applyTaskDerivedFields_(updated);
   updateSheetRecordByRow_(sheet, target.__rowNumber, schema.columns, updated);
+  writeTaskHistory_(
+    actor,
+    taskId,
+    auditAction,
+    'Record Status',
+    previous.recordStatus,
+    recordStatus,
+    auditAction === 'ARCHIVE' ? 'Task archived.' : 'Task reopened.'
+  );
 
   writeAuditLog_(
     actor,
@@ -384,46 +492,22 @@ function setTaskRecordStatus_(actor, taskId, recordStatus, taskStatus, auditActi
   );
 }
 
-function getDashboardSummary(sessionToken) {
+function exportTasks(sessionToken, options) {
   try {
-    var authContext = requireSession_(
-      sessionToken,
-      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
-      'dashboard'
-    );
-    var scopedTasks = applyTaskScopeForUser_(readSheetRecords_('TASKS'), authContext.user);
-    var activeTasks = scopedTasks.filter(function (record) {
-      return normalizeString_(record['Record Status'] || 'Active').toLowerCase() !== 'archived';
+    var list = listTasks(sessionToken, options || {});
+    if (!list.success) {
+      return list;
+    }
+    var headers = ['Task ID', 'Title', 'Department', 'Team', 'Priority', 'Status', 'Progress', 'Assignee', 'Due Date'];
+    var rows = ((list.data && list.data.items) || []).map(function (item) {
+      return [item.taskId, item.taskTitle, item.department, item.team, item.priority, item.status, item.progress, item.primaryAssigneeName, item.dueDate];
     });
-
-    var summary = {
-      totalTasks: scopedTasks.length,
-      assignedTasks: 0,
-      inProgressTasks: 0,
-      completedTasks: 0,
-      overdueTasks: 0,
-      archivedTasks: scopedTasks.length - activeTasks.length
-    };
-
-    activeTasks.forEach(function (record) {
-      var status = normalizeString_(record.Status).toLowerCase();
-      if (status === 'assigned') {
-        summary.assignedTasks += 1;
-      }
-      if (status === 'in progress') {
-        summary.inProgressTasks += 1;
-      }
-      if (status === 'completed') {
-        summary.completedTasks += 1;
-      }
-      if (String(record['Is Overdue']).toLowerCase() === 'true') {
-        summary.overdueTasks += 1;
-      }
-    });
-
-    return successResponse_('Dashboard summary loaded.', summary);
+    if (normalizeString_(options && options.format).toLowerCase() === 'pdf') {
+      return successResponse_('Report generated.', createPdfFromTable_('Task Register', headers, rows));
+    }
+    return successResponse_('Export ready.', downloadPayload_('tasks.csv', 'text/csv', buildCsvText_(headers, rows)));
   } catch (error) {
-    return errorResponse_(error.message || 'Failed to load dashboard summary.');
+    return errorResponse_(error.message || 'Failed to export tasks.');
   }
 }
 
@@ -512,6 +596,35 @@ function validateTaskNumbers_(progress, estimatedHours, actualHours) {
   }
 }
 
+function completionNotesRequired_() {
+  var value = getSettingValue_('REQUIRE_COMPLETION_NOTES', true);
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return normalizeBoolean_(value);
+}
+
+function allowCompletionBelow100_() {
+  var value = getSettingValue_('ALLOW_COMPLETION_BELOW_100', false);
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return normalizeBoolean_(value);
+}
+
+function enforceTaskCompletionRules_(status, progress, completionNotes) {
+  var normalizedStatus = normalizeString_(status).toLowerCase();
+  if (normalizedStatus !== 'completed') {
+    return;
+  }
+  if (normalizeNumber_(progress, 0) < 100 && !allowCompletionBelow100_()) {
+    throw new Error('Completion requires 100% progress.');
+  }
+  if (completionNotesRequired_() && !normalizeString_(completionNotes)) {
+    throw new Error('Completion notes are required when marking a task completed.');
+  }
+}
+
 function resolveDepartmentName_(departmentValue) {
   var rawValue = normalizeString_(departmentValue);
   var departments = readSheetRecords_('DEPARTMENTS').filter(function (record) {
@@ -595,13 +708,74 @@ function applyTaskScopeForUser_(taskRecords, user) {
     return [];
   }
   var role = normalizeString_(user.role);
-  if (role === 'Employee') {
-    return safeRecords.filter(function (record) {
-      return (
-        normalizeString_(record['Primary Assignee']) === normalizeString_(user.employeeId) ||
-        normalizeString_(record['Created By']) === normalizeString_(user.userId)
-      );
+  if (role !== 'Employee') {
+    return safeRecords;
+  }
+  var employeeId = normalizeString_(user.employeeId);
+  var userId = normalizeString_(user.userId);
+  var assignedTaskIds = {};
+  if (employeeId) {
+    safeReadSheetRecords_('TASK_ASSIGNMENTS').forEach(function (record) {
+      if (normalizeString_(record['Employee ID']) !== employeeId) {
+        return;
+      }
+      var status = normalizeString_(record['Assignment Status']).toLowerCase();
+      if (status === 'cancelled' || status === 'reassigned') {
+        return;
+      }
+      assignedTaskIds[normalizeString_(record['Task ID'])] = true;
     });
   }
-  return safeRecords;
+  return safeRecords.filter(function (record) {
+    var taskId = normalizeString_(record['Task ID']);
+    return (
+      (employeeId && normalizeString_(record['Primary Assignee']) === employeeId) ||
+      normalizeString_(record['Created By']) === userId ||
+      assignedTaskIds[taskId]
+    );
+  });
+}
+
+function enforceDelayAndBlockerRules_(record) {
+  var status = normalizeString_(record.Status).toLowerCase();
+  var requireBlocker = Boolean(getSettingValue_('REQUIRE_BLOCKER_DESCRIPTION', true));
+  var requireDelay = Boolean(getSettingValue_('REQUIRE_DELAY_REASON', true));
+  var blocked = status === 'blocked' || normalizeString_(record.Blocker).toLowerCase() === 'yes';
+  if (requireBlocker && blocked && !normalizeString_(record['Blocker Description'])) {
+    throw new Error('Blocker description is required when a task is blocked.');
+  }
+  var delayed = status === 'delayed' || String(record['Is Overdue']).toLowerCase() === 'true';
+  if (requireDelay && delayed && !normalizeString_(record['Delay Reason'])) {
+    throw new Error('Delay reason is required when a task is delayed or overdue.');
+  }
+}
+
+function validateParentTask_(parentTaskId, currentTaskId) {
+  var parentId = normalizeString_(parentTaskId);
+  if (!parentId) {
+    return;
+  }
+  if (parentId === normalizeString_(currentTaskId)) {
+    throw new Error('A task cannot be its own parent.');
+  }
+  var parent = findTaskRecord_(parentId);
+  if (!parent) {
+    throw new Error('Parent Task ID must reference an existing task.');
+  }
+}
+
+function validatePrimaryAssignee_(employeeId) {
+  var id = normalizeString_(employeeId);
+  if (!id) {
+    return;
+  }
+  var employee = safeReadSheetRecords_('EMPLOYEES').find(function (record) {
+    return normalizeString_(record['Employee ID']) === id;
+  });
+  if (!employee) {
+    throw new Error('Primary Assignee must refer to an active employee record.');
+  }
+  if (normalizeString_(employee['Employment Status'] || 'Active').toLowerCase() === 'inactive') {
+    throw new Error('Primary Assignee must refer to an active employee record.');
+  }
 }

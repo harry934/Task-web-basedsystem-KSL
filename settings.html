@@ -1,0 +1,174 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Settings</h1>
+    <p>Configure application title, performance weights, workflow rules, and dimension values.</p>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="saveSettingsButton" class="btn btn-primary" type="button">Save Settings</button>
+        <button id="dimensionsButton" class="btn btn-outline" type="button">Dimensions</button>
+        <button id="backupSettingsButton" class="btn btn-outline" type="button">Backup</button>
+        <button id="rebuildSettingsButton" class="btn btn-outline" type="button">Rebuild Config</button>
+        <button id="refreshSettingsButton" class="btn btn-outline" type="button">Refresh</button>
+      </div>
+      <div class="toolbar-right">
+        <input id="settingsSearchInput" class="input" type="search" placeholder="Search settings..." style="min-width: 220px;">
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Group</th>
+          <th>Value</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody id="settingsTableBody"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
+    </table>
+  </div>
+  <div id="settingsPagination" class="pagination"></div>
+</section>
+<div id="dimensionsModalBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Dimensions</h3>
+      <button class="btn btn-outline" type="button" data-close-modal="dimensionsModalBackdrop">Close</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="dimensionColumnInput">Column</label>
+        <select id="dimensionColumnInput" class="select"></select>
+      </div>
+      <div class="field">
+        <label for="dimensionValueInput">New value</label>
+        <input id="dimensionValueInput" class="input" type="text">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="addDimensionButton" class="btn btn-primary" type="button">Add value</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Column</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="dimensionsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var state = { items: [], page: 1, pages: 1, pageSize: 25, drafts: {} };
+    function load() {
+      KSL.call('listSettingsAdmin', KSL.getSessionToken(), {
+        query: document.getElementById('settingsSearchInput').value.trim(),
+        page: state.page,
+        pageSize: state.pageSize
+      }).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Failed to load settings.');
+        var payload = response.data || {};
+        state.items = payload.items || [];
+        state.page = Number((payload.pagination || {}).page || 1);
+        state.pages = Number((payload.pagination || {}).pages || 1);
+        var body = document.getElementById('settingsTableBody');
+        if (!state.items.length) {
+          body.innerHTML = '<tr><td colspan="5" class="empty-state">No matching data found.</td></tr>';
+        } else {
+          body.innerHTML = state.items.map(function (item) {
+            var current = state.drafts[item.key] !== undefined ? state.drafts[item.key] : item.value;
+            return '<tr><td>' + KSL.escapeHtml(item.key) + '</td><td>' + KSL.escapeHtml(item.group) +
+              '</td><td><input class="input" data-key="' + KSL.escapeHtml(item.key) + '" ' +
+              (item.editable ? '' : 'disabled ') + 'value="' + KSL.escapeHtml(String(current == null ? '' : current)) +
+              '"></td><td>' + KSL.escapeHtml(item.dataType) + '</td><td>' + KSL.escapeHtml(item.description) + '</td></tr>';
+          }).join('');
+        }
+        KSL.renderPager('settingsPagination', state, load);
+      }).catch(function (error) { KSL.showToast(error.message || 'Failed to load settings.', 'error'); });
+    }
+    function loadDimensions() {
+      KSL.call('listDimensionsAdmin', KSL.getSessionToken()).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Failed to load dimensions.');
+        var payload = response.data || {};
+        var select = document.getElementById('dimensionColumnInput');
+        select.innerHTML = (payload.columns || []).map(function (column) {
+          return '<option value="' + KSL.escapeHtml(column) + '">' + KSL.escapeHtml(column) + '</option>';
+        }).join('');
+        document.getElementById('dimensionsTableBody').innerHTML = (payload.items || []).map(function (item) {
+          return '<tr><td>' + KSL.escapeHtml(item.column) + '</td><td>' + KSL.escapeHtml(item.value) +
+            '</td><td>' + KSL.escapeHtml(item.status) +
+            '</td><td><button class="btn btn-outline" type="button" data-column="' + KSL.escapeHtml(item.column) +
+            '" data-value="' + KSL.escapeHtml(item.value) + '" data-activate="' +
+            (item.status === 'Inactive' ? '1' : '0') + '">' +
+            (item.status === 'Inactive' ? 'Activate' : 'Deactivate') + '</button></td></tr>';
+        }).join('');
+        KSL.openModal('dimensionsModalBackdrop');
+      }).catch(function (error) { KSL.showToast(error.message || 'Failed to load dimensions.', 'error'); });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator'], function () {
+        document.getElementById('refreshSettingsButton').addEventListener('click', load);
+        document.getElementById('settingsSearchInput').addEventListener('input', KSL.debounce(function () {
+          state.page = 1;
+          load();
+        }, 350));
+        document.getElementById('settingsTableBody').addEventListener('input', function (event) {
+          var input = event.target.closest('input[data-key]');
+          if (input) state.drafts[input.dataset.key] = input.value;
+        });
+        document.getElementById('saveSettingsButton').addEventListener('click', function () {
+          var settings = Object.keys(state.drafts).map(function (key) {
+            return { key: key, value: state.drafts[key] };
+          });
+          KSL.call('saveSettingsAdmin', KSL.getSessionToken(), { settings: settings }).then(function (response) {
+            if (!response || !response.success) throw new Error((response && response.message) || 'Save failed.');
+            KSL.showToast('Settings saved.', 'success');
+            state.drafts = {};
+            load();
+          }).catch(function (error) { KSL.showToast(error.message || 'Save failed.', 'error'); });
+        });
+        document.getElementById('dimensionsButton').addEventListener('click', loadDimensions);
+        document.getElementById('addDimensionButton').addEventListener('click', function () {
+          KSL.call('saveDimensionValue', KSL.getSessionToken(), {
+            column: document.getElementById('dimensionColumnInput').value,
+            value: document.getElementById('dimensionValueInput').value.trim()
+          }).then(function (response) {
+            if (!response || !response.success) throw new Error((response && response.message) || 'Save failed.');
+            document.getElementById('dimensionValueInput').value = '';
+            loadDimensions();
+          }).catch(function (error) { KSL.showToast(error.message || 'Save failed.', 'error'); });
+        });
+        document.getElementById('dimensionsTableBody').addEventListener('click', function (event) {
+          var button = event.target.closest('button[data-column]');
+          if (!button) return;
+          KSL.call('deactivateDimensionValue', KSL.getSessionToken(), {
+            column: button.dataset.column,
+            value: button.dataset.value,
+            activate: button.dataset.activate === '1'
+          }).then(function (response) {
+            if (!response || !response.success) throw new Error((response && response.message) || 'Update failed.');
+            loadDimensions();
+          }).catch(function (error) { KSL.showToast(error.message || 'Update failed.', 'error'); });
+        });
+        document.getElementById('backupSettingsButton').addEventListener('click', function () {
+          KSL.callBusy('backupSettingsConfig', KSL.getSessionToken()).then(function (response) {
+            if (!response || !response.success) throw new Error((response && response.message) || 'Backup failed.');
+            KSL.downloadFile(response.data);
+          }).catch(function (error) { KSL.showToast(error.message || 'Backup failed.', 'error'); });
+        });
+        document.getElementById('rebuildSettingsButton').addEventListener('click', function () {
+          if (!window.confirm('Rebuild missing sheets, ranges, and settings?')) return;
+          KSL.callBusy('rebuildSettingsConfig', KSL.getSessionToken()).then(function (response) {
+            if (!response || !response.success) throw new Error((response && response.message) || 'Rebuild failed.');
+            KSL.showToast('Configuration rebuilt.', 'success');
+            load();
+          }).catch(function (error) { KSL.showToast(error.message || 'Rebuild failed.', 'error'); });
+        });
+        load();
+      });
+    });
+  })();
+</script>

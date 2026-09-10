@@ -22,7 +22,6 @@
   <body
     data-active-page="<?= activePage ?>"
     data-script-url="<?= scriptUrl ?>"
-    data-google-client-id="<?= googleClientId ?>"
   >
     <div class="kenya-stripe" aria-hidden="true">
       <span class="stripe-black"></span>
@@ -55,16 +54,22 @@
           </div>
 
           <nav class="sidebar-nav" id="sidebarNav">
-            <? navItems.forEach(function(item) { ?>
-              <a
-                class="nav-link <?= activePage === item.id ? 'active' : '' ?>"
-                href="<?= scriptUrl ?>?page=<?= item.id ?>"
-                data-page="<?= item.id ?>"
-                data-roles="<?= item.roles.join(',') ?>"
-              >
-                <i class="fa-solid <?= item.icon ?>"></i>
-                <span><?= item.label ?></span>
-              </a>
+            <? navGroups.forEach(function(group) { ?>
+              <div class="nav-group" data-group="<?= group.name ?>">
+                <div class="nav-group-label"><?= group.name ?></div>
+                <? group.items.forEach(function(item) { ?>
+                  <a
+                    class="nav-link <?= activePage === item.id ? 'active' : '' ?>"
+                    href="<?= scriptUrl ?>?page=<?= item.id ?>"
+                    data-page="<?= item.id ?>"
+                    data-roles="<?= item.roles.join(',') ?>"
+                    data-group="<?= item.group ?>"
+                  >
+                    <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><?!= item.svg ?></svg>
+                    <span><?= item.label ?></span>
+                  </a>
+                <? }); ?>
+              </div>
             <? }); ?>
           </nav>
 
@@ -84,7 +89,9 @@
             </div>
             <div class="topbar-right">
               <button id="notificationButton" class="icon-button" type="button" title="Notifications">
-                <i class="fa-solid fa-bell"></i>
+                <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.1-1.6-5.6-4.5-6.3V4c0-.8-.7-1.5-1.5-1.5S10.5 3.2 10.5 4v.7C7.6 5.4 6 7.9 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                </svg>
                 <span id="notificationBadge" class="badge hidden">0</span>
               </button>
               <div class="user-chip">

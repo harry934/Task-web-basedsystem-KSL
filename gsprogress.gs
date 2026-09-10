@@ -46,6 +46,57 @@ function listProgressUpdates(sessionToken, options) {
   }
 }
 
+function createProgressUpdate(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(
+      sessionToken,
+      ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'],
+      'progress'
+    );
+    var input = payload || {};
+    var taskId = normalizeString_(input.taskId);
+    var progress = normalizeNumber_(input.progress, 0);
+    if (!taskId) {
+      throw new Error('Task ID is required.');
+    }
+    if (progress < 0 || progress > 100) {
+      throw new Error('Progress must be between 0 and 100.');
+    }
+    var employeeId = normalizeString_(input.employeeId || authContext.user.employeeId);
+    if (!employeeId) {
+      throw new Error('Employee ID is required for a progress update.');
+    }
+    var task = findTaskRecord_(taskId);
+    if (!task) {
+      throw new Error('Task was not found.');
+    }
+    var assignment = safeReadSheetRecords_('TASK_ASSIGNMENTS').find(function (record) {
+      return (
+        normalizeString_(record['Task ID']) === taskId &&
+        normalizeString_(record['Employee ID']) === employeeId &&
+        ['rejected', 'reassigned', 'cancelled'].indexOf(normalizeString_(record['Assignment Status']).toLowerCase()) === -1
+      );
+    });
+    if (assignment) {
+      return submitMyProgress(sessionToken, {
+        assignmentId: assignment['Assignment ID'],
+        progress: progress,
+        status: input.status,
+        hoursWorked: input.hoursWorked,
+        workCompleted: input.workCompleted,
+        workRemaining: input.workRemaining,
+        challenges: input.challenges,
+        blockers: input.blockers,
+        nextAction: input.nextAction,
+        remarks: input.remarks
+      });
+    }
+    throw new Error('No active assignment was found for this task and employee.');
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to submit progress update.');
+  }
+}
+
 function reviewProgressUpdate(sessionToken, payload) {
   try {
     var authContext = requireSession_(

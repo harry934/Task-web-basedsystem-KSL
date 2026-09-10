@@ -12,8 +12,10 @@ function listMyTasks(sessionToken, options) {
     var employeeId = getCurrentEmployeeId_(authContext.user);
     var filters = options || {};
     var query = normalizeString_(filters.query).toLowerCase();
+    var view = normalizeString_(filters.view).toLowerCase() || 'all';
     var page = normalizeNumber_(filters.page, 1);
     var pageSize = normalizeNumber_(filters.pageSize, 25);
+    var dueSoonDays = getDueSoonDays_();
 
     if (!employeeId && authContext.user.role === 'Employee') {
       return successResponse_('No employee ID is linked to this account yet.', buildPagedResult_([], page, pageSize));
@@ -43,10 +45,20 @@ function listMyTasks(sessionToken, options) {
         mapped.priority = normalizeString_(task.Priority);
         mapped.taskStatus = normalizeString_(task.Status);
         mapped.isOverdue = String(task['Is Overdue']).toLowerCase() === 'true';
+        mapped.daysRemaining = normalizeString_(task['Days Remaining']);
         mapped.blocker = normalizeString_(task.Blocker);
         return mapped;
       })
       .filter(function (item) {
+        if (view === 'overdue' && !item.isOverdue) {
+          return false;
+        }
+        if (view === 'duesoon') {
+          var daysRemaining = normalizeNumber_(item.daysRemaining, 9999);
+          if (item.isOverdue || daysRemaining > dueSoonDays) {
+            return false;
+          }
+        }
         if (!query) {
           return true;
         }

@@ -69,11 +69,46 @@ function createAssignment(sessionToken, payload) {
     var authContext = requireSession_(sessionToken, ASSIGNMENT_ROLES, 'assignments');
     var input = payload || {};
     var taskId = normalizeString_(input.taskId);
+    var employeeIds = Array.isArray(input.employeeIds) ? input.employeeIds : [];
+    var employeeId = normalizeString_(input.employeeId);
+    if (employeeId) {
+      employeeIds.push(employeeId);
+    }
+    employeeIds = employeeIds
+      .map(function (value) {
+        return normalizeString_(value);
+      })
+      .filter(Boolean)
+      .filter(function (value, index, all) {
+        return all.indexOf(value) === index;
+      });
+    var isPrimary = Boolean(input.isPrimary);
+    if (!taskId || !employeeIds.length) {
+      throw new Error('Task and at least one employee are required.');
+    }
+    var created = [];
+    employeeIds.forEach(function (id, index) {
+      var result = createSingleAssignment_(authContext.user, {
+        taskId: taskId,
+        employeeId: id,
+        isPrimary: isPrimary || index === 0
+      });
+      created.push(result);
+    });
+    return successResponse_('Assignment saved.', {
+      assignmentId: created[0] && created[0].assignmentId,
+      createdCount: created.length,
+      assignments: created
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to create assignment.');
+  }
+}
+
+function createSingleAssignment_(actor, input) {
+    var taskId = normalizeString_(input.taskId);
     var employeeId = normalizeString_(input.employeeId);
     var isPrimary = Boolean(input.isPrimary);
-    if (!taskId || !employeeId) {
-      throw new Error('Task and employee are required.');
-    }
 
     var task = findTaskRecord_(taskId);
     if (!task) {
@@ -116,7 +151,7 @@ function createAssignment(sessionToken, payload) {
       'Employee Name': person.fullName,
       Department: person.department || normalizeString_(task.Department),
       Team: normalizeString_(task.Team),
-      'Assigned By': authContext.user.userId,
+      'Assigned By': actor.userId,
       'Assignment Date': now,
       'Start Date': task['Start Date'] || now,
       'Due Date': task['Due Date'],
@@ -139,19 +174,19 @@ function createAssignment(sessionToken, payload) {
       var updatedTask = Object.assign({}, task);
       updatedTask['Primary Assignee'] = employeeId;
       updatedTask['Primary Assignee Name'] = person.fullName;
-      updatedTask['Assigned By'] = authContext.user.userId;
+      updatedTask['Assigned By'] = actor.userId;
       updatedTask['Assigned Date'] = now;
       updatedTask.Status =
         normalizeString_(updatedTask.Status).toLowerCase() === 'draft' ? 'Assigned' : updatedTask.Status;
       updatedTask['Updated Timestamp'] = now;
-      updatedTask['Updated By'] = authContext.user.userId;
+      updatedTask['Updated By'] = actor.userId;
       applyTaskDerivedFields_(updatedTask);
       updateSheetRecordByRow_(taskSheet, task.__rowNumber, taskSchema.columns, updatedTask);
     }
 
     refreshTaskAssigneeSummary_(taskId);
     writeTaskHistory_(
-      authContext.user,
+      actor,
       taskId,
       'ASSIGN',
       'Primary Assignee',
@@ -172,7 +207,7 @@ function createAssignment(sessionToken, payload) {
     );
 
     writeAuditLog_(
-      authContext.user,
+      actor,
       'ASSIGN',
       'Assignments',
       assignmentId,
@@ -181,13 +216,10 @@ function createAssignment(sessionToken, payload) {
       mapAssignmentForResponse_(record)
     );
 
-    return successResponse_('Assignment created.', {
+    return {
       assignmentId: assignmentId,
       assignment: mapAssignmentForResponse_(record)
-    });
-  } catch (error) {
-    return errorResponse_(error.message || 'Failed to create assignment.');
-  }
+    };
 }
 
 function reassignTask(sessionToken, payload) {
@@ -263,6 +295,43 @@ function reassignTask(sessionToken, payload) {
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to reassign task.');
+  }
+}
+
+function deleteAssignment(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'assignments');
+    var assignmentId = normalizeString_(payload && payload.assignmentId);
+    if (!assignmentId) {
+      throw new Error('assignmentId is required.');
+    }
+    return withScriptLock_(function () {
+      var schema = resolveSchema_('TASK_ASSIGNMENTS');
+      var sheet = getSheetBySchema_(schema);
+      var records = readSheetRecords_(schema);
+      var current = records.find(function (record) {
+        return normalizeString_(record['Assignment ID']) === assignmentId;
+      });
+      if (!current) {
+        throw new Error('Assignment was not found.');
+      }
+      var previous = mapAssignmentForResponse_(current);
+      var taskId = normalizeString_(current['Task ID']);
+      deleteRowsByNumberDesc_(sheet, [current.__rowNumber]);
+      refreshTaskAssigneeSummary_(taskId);
+      writeAuditLog_(
+        authContext.user,
+        'DELETE',
+        'Assignments',
+        assignmentId,
+        'Permanently deleted assignment.',
+        previous,
+        ''
+      );
+      return successResponse_('Assignment deleted permanently.', { assignmentId: assignmentId, taskId: taskId });
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to delete assignment.');
   }
 }
 

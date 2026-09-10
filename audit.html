@@ -1,0 +1,128 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Audit Log</h1>
+    <p>Read-only history of material changes, including before/after values and Nairobi timestamps.</p>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="auditExportButton" class="btn btn-primary" type="button">Export</button>
+        <button id="auditExportPdfButton" class="btn btn-outline" type="button">Export PDF</button>
+        <button id="auditClearButton" class="btn btn-outline" type="button">Clear</button>
+        <button id="auditRefreshButton" class="btn btn-outline" type="button">Refresh</button>
+      </div>
+      <div class="toolbar-right">
+        <input id="auditStartInput" class="input" type="date">
+        <input id="auditEndInput" class="input" type="date">
+        <input id="auditUserInput" class="input" type="search" placeholder="User" style="min-width: 130px;">
+        <input id="auditModuleInput" class="input" type="search" placeholder="Module" style="min-width: 130px;">
+        <input id="auditActionInput" class="input" type="search" placeholder="Action" style="min-width: 120px;">
+        <input id="auditSearchInput" class="input" type="search" placeholder="Search..." style="min-width: 160px;">
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>User</th>
+          <th>Action</th>
+          <th>Module</th>
+          <th>Record</th>
+          <th>Description</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="auditTableBody"><tr><td colspan="7" class="empty-state">Loading...</td></tr></tbody>
+    </table>
+  </div>
+  <div id="auditPagination" class="pagination"></div>
+</section>
+<div id="auditDetailBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Audit detail</h3>
+      <button class="btn btn-outline" type="button" data-close-modal="auditDetailBackdrop">Close</button>
+    </div>
+    <pre id="auditDetailBody" class="textarea" style="min-height: 220px; white-space: pre-wrap;"></pre>
+  </div>
+</div>
+<script>
+  (function () {
+    var state = { items: [], page: 1, pages: 1, pageSize: 25 };
+    function filters() {
+      return {
+        startDate: document.getElementById('auditStartInput').value,
+        endDate: document.getElementById('auditEndInput').value,
+        user: document.getElementById('auditUserInput').value.trim(),
+        module: document.getElementById('auditModuleInput').value.trim(),
+        action: document.getElementById('auditActionInput').value.trim(),
+        query: document.getElementById('auditSearchInput').value.trim(),
+        page: state.page,
+        pageSize: state.pageSize
+      };
+    }
+    function load() {
+      KSL.call('listAuditLog', KSL.getSessionToken(), filters()).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Failed to load audit log.');
+        var payload = response.data || {};
+        state.items = payload.items || [];
+        state.page = Number((payload.pagination || {}).page || 1);
+        state.pages = Number((payload.pagination || {}).pages || 1);
+        var body = document.getElementById('auditTableBody');
+        if (!state.items.length) {
+          body.innerHTML = '<tr><td colspan="7" class="empty-state">No matching data found.</td></tr>';
+        } else {
+          body.innerHTML = state.items.map(function (item) {
+            return '<tr><td>' + KSL.escapeHtml(KSL.formatDate(item.timestamp) || '-') + '</td><td>' +
+              KSL.escapeHtml(item.userName || item.userId) + '</td><td>' + KSL.escapeHtml(item.action) +
+              '</td><td>' + KSL.escapeHtml(item.module) + '</td><td>' + KSL.escapeHtml(item.recordId) +
+              '</td><td>' + KSL.escapeHtml(item.description) +
+              '</td><td><button class="btn btn-outline" type="button" data-id="' + KSL.escapeHtml(item.auditId) +
+              '">View</button></td></tr>';
+          }).join('');
+        }
+        KSL.renderPager('auditPagination', state, load);
+      }).catch(function (error) { KSL.showToast(error.message || 'Failed to load audit log.', 'error'); });
+    }
+    function exportFile(format) {
+      var options = filters();
+      options.format = format;
+      KSL.callBusy('exportAuditLog', KSL.getSessionToken(), options).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
+        KSL.downloadFile(response.data);
+        KSL.showToast('Report generated.', 'success');
+      }).catch(function (error) { KSL.showToast(error.message || 'Export failed.', 'error'); });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator', 'Manager'], function () {
+        document.getElementById('auditExportButton').addEventListener('click', function () { exportFile('csv'); });
+        document.getElementById('auditExportPdfButton').addEventListener('click', function () { exportFile('pdf'); });
+        document.getElementById('auditRefreshButton').addEventListener('click', load);
+        document.getElementById('auditClearButton').addEventListener('click', function () {
+          ['auditStartInput', 'auditEndInput', 'auditUserInput', 'auditModuleInput', 'auditActionInput', 'auditSearchInput'].forEach(function (id) {
+            document.getElementById(id).value = '';
+          });
+          state.page = 1;
+          load();
+        });
+        ['auditStartInput', 'auditEndInput'].forEach(function (id) {
+          document.getElementById(id).addEventListener('change', function () { state.page = 1; load(); });
+        });
+        ['auditUserInput', 'auditModuleInput', 'auditActionInput', 'auditSearchInput'].forEach(function (id) {
+          document.getElementById(id).addEventListener('input', KSL.debounce(function () { state.page = 1; load(); }, 350));
+        });
+        document.getElementById('auditTableBody').addEventListener('click', function (event) {
+          var button = event.target.closest('button[data-id]');
+          if (!button) return;
+          var item = state.items.find(function (entry) { return entry.auditId === button.dataset.id; });
+          if (!item) return;
+          document.getElementById('auditDetailBody').textContent = JSON.stringify(item, null, 2);
+          KSL.openModal('auditDetailBackdrop');
+        });
+        load();
+      });
+    });
+  })();
+</script>

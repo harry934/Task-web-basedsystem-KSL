@@ -1,0 +1,385 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Employees</h1>
+    <p>Add staff to the master list so they can be assigned tasks. This is separate from Google login accounts.</p>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="newEmployeeButton" class="btn btn-primary" type="button">
+          <i class="fa-solid fa-plus"></i>
+          New employee
+        </button>
+        <button id="employeesRefreshButton" class="btn btn-outline" type="button">Refresh</button>
+      </div>
+      <div class="toolbar-right">
+        <input id="employeesSearchInput" class="input" type="search" placeholder="Search name, ID, email..." style="min-width: 240px;">
+        <select id="employeesDepartmentFilter" class="select" style="min-width: 160px;">
+          <option value="">All departments</option>
+        </select>
+        <select id="employeesStatusFilter" class="select" style="min-width: 140px;">
+          <option value="">All statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Employee ID</th>
+          <th>Name</th>
+          <th>Department</th>
+          <th>Job title</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="employeesTableBody">
+        <tr><td colspan="7" class="empty-state">Loading employees...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="employeesPagination" class="pagination"></div>
+</section>
+
+<div id="employeeModalBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="employeeModalTitle">New employee</h3>
+      <button class="btn btn-outline" type="button" data-close-modal="employeeModalBackdrop">Close</button>
+    </div>
+    <form id="employeeForm">
+      <input id="employeeIdInput" type="hidden">
+      <div class="form-grid">
+        <div class="field full">
+          <label for="employeeFullNameInput">Full name</label>
+          <input id="employeeFullNameInput" class="input" type="text" required>
+        </div>
+        <div class="field">
+          <label for="employeeNumberInput">Employee number</label>
+          <input id="employeeNumberInput" class="input" type="text" placeholder="Leave blank to auto-generate ID">
+        </div>
+        <div class="field">
+          <label for="employeeEmailInput">Work email</label>
+          <input id="employeeEmailInput" class="input" type="email">
+        </div>
+        <div class="field">
+          <label for="employeePhoneInput">Phone</label>
+          <input id="employeePhoneInput" class="input" type="text">
+        </div>
+        <div class="field">
+          <label for="employeeDepartmentInput">Department</label>
+          <select id="employeeDepartmentInput" class="select" required></select>
+        </div>
+        <div class="field">
+          <label for="employeeJobTitleInput">Job title</label>
+          <select id="employeeJobTitleInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="employeeTypeInput">Employment type</label>
+          <select id="employeeTypeInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="employeeLocationInput">Work location</label>
+          <select id="employeeLocationInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="employeeSectionInput">Section</label>
+          <select id="employeeSectionInput" class="select"></select>
+        </div>
+        <div class="field">
+          <label for="employeeTeamInput">Team</label>
+          <input id="employeeTeamInput" class="input" type="text">
+        </div>
+        <div class="field">
+          <label for="employeeSupervisorNameInput">Supervisor name</label>
+          <input id="employeeSupervisorNameInput" class="input" type="text">
+        </div>
+        <div class="field">
+          <label for="employeeDateJoinedInput">Date joined</label>
+          <input id="employeeDateJoinedInput" class="input" type="date">
+        </div>
+        <div class="field">
+          <label for="employeeStatusInput">Status</label>
+          <select id="employeeStatusInput" class="select">
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" data-close-modal="employeeModalBackdrop">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save employee</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var state = {
+      items: [],
+      page: 1,
+      pages: 1,
+      pageSize: 25,
+      meta: {}
+    };
+
+    function fillSelect(id, values, placeholder) {
+      var select = document.getElementById(id);
+      var html = placeholder ? '<option value="">' + KSL.escapeHtml(placeholder) + '</option>' : '';
+      html += (values || [])
+        .map(function (value) {
+          return '<option value="' + KSL.escapeHtml(value) + '">' + KSL.escapeHtml(value) + '</option>';
+        })
+        .join('');
+      select.innerHTML = html;
+    }
+
+    function getFilters() {
+      return {
+        query: document.getElementById('employeesSearchInput').value.trim(),
+        department: document.getElementById('employeesDepartmentFilter').value,
+        status: document.getElementById('employeesStatusFilter').value,
+        page: state.page,
+        pageSize: state.pageSize
+      };
+    }
+
+    function renderTable() {
+      var body = document.getElementById('employeesTableBody');
+      if (!state.items.length) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-state">No employees yet. Click New employee.</td></tr>';
+        return;
+      }
+      body.innerHTML = state.items
+        .map(function (item) {
+          return (
+            '<tr><td>' +
+            KSL.escapeHtml(item.employeeId) +
+            '</td><td>' +
+            KSL.escapeHtml(item.fullName) +
+            '</td><td>' +
+            KSL.escapeHtml(item.department || '-') +
+            '</td><td>' +
+            KSL.escapeHtml(item.jobTitle || '-') +
+            '</td><td>' +
+            KSL.escapeHtml(item.email || '-') +
+            '</td><td><span class="status-badge ' +
+            KSL.statusClass(item.employmentStatus) +
+            '">' +
+            KSL.escapeHtml(item.employmentStatus) +
+            '</span></td><td><div class="toolbar-left">' +
+            '<button class="btn btn-outline" type="button" data-action="edit" data-id="' +
+            KSL.escapeHtml(item.employeeId) +
+            '">Edit</button>' +
+            (String(item.employmentStatus || '').toLowerCase() === 'inactive'
+              ? ''
+              : '<button class="btn btn-danger" type="button" data-action="deactivate" data-id="' +
+                KSL.escapeHtml(item.employeeId) +
+                '">Deactivate</button>') +
+            '</div></td></tr>'
+          );
+        })
+        .join('');
+    }
+
+    function renderPagination() {
+      var pagination = document.getElementById('employeesPagination');
+      pagination.innerHTML =
+        '<button type="button" id="employeesPrevPage" ' +
+        (state.page <= 1 ? 'disabled' : '') +
+        '>Previous</button>' +
+        '<button type="button" disabled>Page ' +
+        state.page +
+        ' of ' +
+        state.pages +
+        '</button>' +
+        '<button type="button" id="employeesNextPage" ' +
+        (state.page >= state.pages ? 'disabled' : '') +
+        '>Next</button>';
+      var prev = document.getElementById('employeesPrevPage');
+      var next = document.getElementById('employeesNextPage');
+      if (prev) {
+        prev.addEventListener('click', function () {
+          state.page -= 1;
+          loadEmployees();
+        });
+      }
+      if (next) {
+        next.addEventListener('click', function () {
+          state.page += 1;
+          loadEmployees();
+        });
+      }
+    }
+
+    function loadEmployees() {
+      KSL.call('listEmployees', KSL.getSessionToken(), getFilters())
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Failed to load employees.');
+          }
+          var payload = response.data || {};
+          state.items = payload.items || [];
+          state.page = Number((payload.pagination || {}).page || 1);
+          state.pages = Number((payload.pagination || {}).pages || 1);
+          renderTable();
+          renderPagination();
+        })
+        .catch(function (error) {
+          KSL.showToast(error.message || 'Failed to load employees.', 'error');
+        });
+    }
+
+    function openCreate() {
+      document.getElementById('employeeForm').reset();
+      document.getElementById('employeeIdInput').value = '';
+      document.getElementById('employeeModalTitle').textContent = 'New employee';
+      document.getElementById('employeeStatusInput').value = 'Active';
+      KSL.openModal('employeeModalBackdrop');
+    }
+
+    function openEdit(employeeId) {
+      var item = state.items.find(function (row) {
+        return row.employeeId === employeeId;
+      });
+      if (!item) {
+        KSL.showToast('Employee not found.', 'error');
+        return;
+      }
+      document.getElementById('employeeModalTitle').textContent = 'Edit employee';
+      document.getElementById('employeeIdInput').value = item.employeeId;
+      document.getElementById('employeeFullNameInput').value = item.fullName || '';
+      document.getElementById('employeeNumberInput').value = item.employeeNumber || '';
+      document.getElementById('employeeEmailInput').value = item.email || '';
+      document.getElementById('employeePhoneInput').value = item.phone || '';
+      document.getElementById('employeeDepartmentInput').value = item.department || '';
+      document.getElementById('employeeJobTitleInput').value = item.jobTitle || '';
+      document.getElementById('employeeTypeInput').value = item.employmentType || '';
+      document.getElementById('employeeLocationInput').value = item.workLocation || '';
+      document.getElementById('employeeSectionInput').value = item.section || '';
+      document.getElementById('employeeTeamInput').value = item.team || '';
+      document.getElementById('employeeSupervisorNameInput').value = item.supervisorName || '';
+      document.getElementById('employeeStatusInput').value = item.employmentStatus || 'Active';
+      if (item.dateJoined) {
+        var date = new Date(item.dateJoined);
+        if (!isNaN(date.getTime())) {
+          var mm = String(date.getMonth() + 1).padStart(2, '0');
+          var dd = String(date.getDate()).padStart(2, '0');
+          document.getElementById('employeeDateJoinedInput').value =
+            date.getFullYear() + '-' + mm + '-' + dd;
+        }
+      }
+      KSL.openModal('employeeModalBackdrop');
+    }
+
+    function collectPayload() {
+      return {
+        employeeId: document.getElementById('employeeIdInput').value.trim(),
+        fullName: document.getElementById('employeeFullNameInput').value.trim(),
+        employeeNumber: document.getElementById('employeeNumberInput').value.trim(),
+        email: document.getElementById('employeeEmailInput').value.trim(),
+        phone: document.getElementById('employeePhoneInput').value.trim(),
+        department: document.getElementById('employeeDepartmentInput').value,
+        jobTitle: document.getElementById('employeeJobTitleInput').value,
+        employmentType: document.getElementById('employeeTypeInput').value,
+        workLocation: document.getElementById('employeeLocationInput').value,
+        section: document.getElementById('employeeSectionInput').value,
+        team: document.getElementById('employeeTeamInput').value.trim(),
+        supervisorName: document.getElementById('employeeSupervisorNameInput').value.trim(),
+        dateJoined: document.getElementById('employeeDateJoinedInput').value,
+        employmentStatus: document.getElementById('employeeStatusInput').value
+      };
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator', 'Manager'], function () {
+        KSL.call('getEmployeeFormMetadata', KSL.getSessionToken())
+          .then(function (response) {
+            state.meta = (response && response.data) || {};
+            fillSelect('employeesDepartmentFilter', state.meta.departments || [], 'All departments');
+            fillSelect('employeeDepartmentInput', state.meta.departments || [], 'Select department');
+            fillSelect('employeeJobTitleInput', state.meta.jobTitles || [], 'Select job title');
+            fillSelect('employeeTypeInput', state.meta.employmentTypes || [], 'Select type');
+            fillSelect('employeeLocationInput', state.meta.workLocations || [], 'Select location');
+            fillSelect('employeeSectionInput', state.meta.sections || [], 'Select section');
+          })
+          .catch(function () {
+            return null;
+          });
+
+        document.getElementById('newEmployeeButton').addEventListener('click', openCreate);
+        document.getElementById('employeesRefreshButton').addEventListener('click', function () {
+          state.page = 1;
+          loadEmployees();
+        });
+        document.getElementById('employeesSearchInput').addEventListener(
+          'input',
+          KSL.debounce(function () {
+            state.page = 1;
+            loadEmployees();
+          }, 400)
+        );
+        document.getElementById('employeesDepartmentFilter').addEventListener('change', function () {
+          state.page = 1;
+          loadEmployees();
+        });
+        document.getElementById('employeesStatusFilter').addEventListener('change', function () {
+          state.page = 1;
+          loadEmployees();
+        });
+        document.getElementById('employeesTableBody').addEventListener('click', function (event) {
+          var button = event.target.closest('button[data-action]');
+          if (!button) {
+            return;
+          }
+          var id = button.dataset.id || '';
+          if (button.dataset.action === 'edit') {
+            openEdit(id);
+            return;
+          }
+          if (!window.confirm('Deactivate this employee? They will no longer appear in assignment lists.')) {
+            return;
+          }
+          KSL.call('deactivateEmployee', KSL.getSessionToken(), { employeeId: id })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Deactivate failed.');
+              }
+              KSL.showToast('Employee deactivated.', 'success');
+              loadEmployees();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Deactivate failed.', 'error');
+            });
+        });
+        document.getElementById('employeeForm').addEventListener('submit', function (event) {
+          event.preventDefault();
+          var payload = collectPayload();
+          var fn = payload.employeeId ? 'updateEmployee' : 'createEmployee';
+          KSL.call(fn, KSL.getSessionToken(), payload)
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Save failed.');
+              }
+              KSL.showToast('Employee saved.', 'success');
+              KSL.closeModal('employeeModalBackdrop');
+              state.page = 1;
+              loadEmployees();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Save failed.', 'error');
+            });
+        });
+        loadEmployees();
+      });
+    });
+  })();
+</script>

@@ -4,6 +4,7 @@ function listDepartments(sessionToken, options) {
     var filters = options || {};
     var query = normalizeString_(filters.query).toLowerCase();
     var statusFilter = normalizeString_(filters.status).toLowerCase();
+    var headFilter = normalizeString_(filters.departmentHead).toLowerCase();
     var page = normalizeNumber_(filters.page, 1);
     var pageSize = normalizeNumber_(filters.pageSize, 25);
 
@@ -20,6 +21,9 @@ function listDepartments(sessionToken, options) {
           .toLowerCase();
 
         if (statusFilter && status !== statusFilter) {
+          return false;
+        }
+        if (headFilter && normalizeString_(record['Department Head']).toLowerCase().indexOf(headFilter) === -1) {
           return false;
         }
         if (query && searchText.indexOf(query) === -1) {
@@ -259,6 +263,62 @@ function assertDepartmentCanArchive_(departmentId) {
   }).length;
   if (activeTaskCount > 0) {
     throw new Error('Department has active task references and cannot be archived.');
+  }
+}
+
+function deleteDepartment(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'departments');
+    var departmentId = normalizeString_(payload && payload.departmentId);
+    if (!departmentId) {
+      throw new Error('departmentId is required.');
+    }
+    return withScriptLock_(function () {
+      var schema = resolveSchema_('DEPARTMENTS');
+      var sheet = getSheetBySchema_(schema);
+      var records = readSheetRecords_(schema);
+      var target = records.find(function (record) {
+        return normalizeString_(record['Department ID']) === departmentId;
+      });
+      if (!target) {
+        throw new Error('Department was not found.');
+      }
+      assertDepartmentCanDelete_(departmentId);
+      var previous = mapDepartmentForResponse_(target);
+      deleteRowsByNumberDesc_(sheet, [target.__rowNumber]);
+      writeAuditLog_(
+        authContext.user,
+        'DELETE',
+        'Departments',
+        departmentId,
+        'Permanently deleted department.',
+        previous,
+        ''
+      );
+      return successResponse_('Department deleted permanently.', { departmentId: departmentId });
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to delete department.');
+  }
+}
+
+function assertDepartmentCanDelete_(departmentId) {
+  assertDepartmentCanArchive_(departmentId);
+  var departments = readSheetRecords_('DEPARTMENTS');
+  var targetDepartment = departments.find(function (record) {
+    return normalizeString_(record['Department ID']) === normalizeString_(departmentId);
+  });
+  var targetName = targetDepartment ? normalizeString_(targetDepartment['Department Name']) : '';
+  var activeTeamCount = safeReadSheetRecords_('TEAMS').filter(function (record) {
+    var teamDepartment = normalizeString_(record.Department);
+    var sameDepartment =
+      teamDepartment === normalizeString_(departmentId) ||
+      (targetName && teamDepartment.toLowerCase() === targetName.toLowerCase());
+    var isActive = normalizeString_(record.Status).toLowerCase() !== 'archived';
+    return sameDepartment && isActive;
+  }).length;
+  if (activeTeamCount > 0) {
+    throw new Error('Department has active team references and cannot be deleted.');
   }
 }
 

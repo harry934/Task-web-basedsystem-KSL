@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
-    <h1>Operations dashboard</h1>
-    <p>Overview of current task status for Kenya Shipyards Limited.</p>
+    <h1>Dashboard</h1>
+    <p>Role-scoped KPIs, filters, and printable operational summaries for Kenya Shipyards Limited.</p>
   </div>
 
   <div class="card">
@@ -11,14 +11,20 @@
           <i class="fa-solid fa-rotate-right"></i>
           Refresh
         </button>
+        <button id="exportDashboardButton" class="btn btn-outline" type="button">Export</button>
+        <button id="exportDashboardPdfButton" class="btn btn-outline" type="button">Export PDF</button>
       </div>
       <div class="toolbar-right">
-        <span class="page-note">Role-scoped metrics for current account.</span>
+        <input id="dashboardStartInput" class="input" type="date">
+        <input id="dashboardEndInput" class="input" type="date">
+        <input id="dashboardDepartmentInput" class="input" type="search" placeholder="Department" style="min-width: 140px;">
+        <input id="dashboardSupervisorInput" class="input" type="search" placeholder="Supervisor" style="min-width: 140px;">
       </div>
     </div>
   </div>
 
   <div id="dashboardKpiGrid" class="kpi-grid"></div>
+  <div id="dashboardCharts" class="chart-grid"></div>
 </section>
 
 <script>
@@ -29,49 +35,114 @@
       { key: 'inProgressTasks', label: 'In Progress' },
       { key: 'completedTasks', label: 'Completed' },
       { key: 'overdueTasks', label: 'Overdue' },
-      { key: 'archivedTasks', label: 'Archived' }
+      { key: 'dueSoonTasks', label: 'Due Soon' },
+      { key: 'blockedTasks', label: 'Blocked' },
+      { key: 'completionRate', label: 'Completion %' }
     ];
 
-    function renderKpis(summary) {
-      var container = document.getElementById('dashboardKpiGrid');
-      if (!container) {
-        return;
+    function filters() {
+      return {
+        startDate: document.getElementById('dashboardStartInput').value,
+        endDate: document.getElementById('dashboardEndInput').value,
+        department: document.getElementById('dashboardDepartmentInput').value.trim(),
+        supervisor: document.getElementById('dashboardSupervisorInput').value.trim()
+      };
+    }
+
+    function renderBarChart(title, map) {
+      var entries = Object.keys(map || {});
+      if (!entries.length) {
+        return '<div class="card chart-card"><h3>' + KSL.escapeHtml(title) + '</h3><p class="page-note">No matching data found.</p></div>';
       }
-      container.innerHTML = KPI_CONFIG.map(function (item) {
-        var value = Number(summary[item.key] || 0);
+      var max = entries.reduce(function (highest, key) {
+        return Math.max(highest, Number(map[key] || 0));
+      }, 1);
+      return (
+        '<div class="card chart-card"><h3>' +
+        KSL.escapeHtml(title) +
+        '</h3>' +
+        entries.map(function (key) {
+          var value = Number(map[key] || 0);
+          var width = Math.round((value / max) * 100);
+          return (
+            '<div class="chart-row"><span>' +
+            KSL.escapeHtml(key) +
+            '</span><div class="chart-bar"><span style="width:' +
+            width +
+            '%"></span></div><strong>' +
+            value +
+            '</strong></div>'
+          );
+        }).join('') +
+        '</div>'
+      );
+    }
+
+    function render(summary) {
+      document.getElementById('dashboardKpiGrid').innerHTML = KPI_CONFIG.map(function (item) {
         return (
-          '<div class="card kpi-card">' +
-          '<h3>' +
+          '<div class="card kpi-card"><h3>' +
           KSL.escapeHtml(item.label) +
-          '</h3>' +
-          '<strong>' +
-          value +
-          '</strong>' +
-          '</div>'
+          '</h3><strong>' +
+          Number(summary[item.key] || 0) +
+          '</strong></div>'
         );
       }).join('');
+      var charts = summary.charts || {};
+      document.getElementById('dashboardCharts').innerHTML =
+        renderBarChart('Status mix', charts.status) +
+        renderBarChart('Priority mix', charts.priority) +
+        renderBarChart('Department mix', charts.department);
     }
 
     function loadDashboard() {
-      KSL.call('getDashboardSummary', KSL.getSessionToken())
+      KSL.call('getDashboardSummary', KSL.getSessionToken(), filters())
         .then(function (response) {
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Failed to load dashboard.');
           }
-          renderKpis(response.data || {});
+          render(response.data || {});
         })
         .catch(function (error) {
+          render({
+            totalTasks: 0,
+            assignedTasks: 0,
+            inProgressTasks: 0,
+            completedTasks: 0,
+            overdueTasks: 0,
+            dueSoonTasks: 0,
+            blockedTasks: 0,
+            completionRate: 0,
+            charts: {}
+          });
           KSL.showToast(error.message || 'Failed to load dashboard.', 'error');
         });
+    }
+
+    function exportFile(format) {
+      var options = filters();
+      options.format = format;
+      KSL.callBusy('exportDashboard', KSL.getSessionToken(), options).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
+        KSL.downloadFile(response.data);
+        KSL.showToast('Report generated.', 'success');
+      }).catch(function (error) {
+        KSL.showToast(error.message || 'Export failed.', 'error');
+      });
     }
 
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
         loadDashboard();
-        var refreshButton = document.getElementById('refreshDashboardButton');
-        if (refreshButton) {
-          refreshButton.addEventListener('click', loadDashboard);
-        }
+        document.getElementById('refreshDashboardButton').addEventListener('click', loadDashboard);
+        document.getElementById('exportDashboardButton').addEventListener('click', function () { exportFile('csv'); });
+        document.getElementById('exportDashboardPdfButton').addEventListener('click', function () { exportFile('pdf'); });
+        ['dashboardStartInput', 'dashboardEndInput'].forEach(function (id) {
+          document.getElementById(id).addEventListener('change', loadDashboard);
+        });
+        ['dashboardDepartmentInput', 'dashboardSupervisorInput'].forEach(function (id) {
+          document.getElementById(id).addEventListener('input', KSL.debounce(loadDashboard, 400));
+        });
       });
     });
   })();

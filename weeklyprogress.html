@@ -1,0 +1,121 @@
+<section class="page-shell">
+  <div class="page-header">
+    <h1>Weekly Progress</h1>
+    <p>Generate Monday-Sunday snapshots and capture supervisor comments before finalization.</p>
+  </div>
+  <div class="card">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button id="generateWeekButton" class="btn btn-primary" type="button">Generate Week</button>
+        <button id="exportWeekButton" class="btn btn-outline" type="button">Export</button>
+        <button id="exportWeekPdfButton" class="btn btn-outline" type="button">Export PDF</button>
+        <button id="refreshWeekButton" class="btn btn-outline" type="button">Refresh</button>
+      </div>
+      <div class="toolbar-right">
+        <input id="weekStartInput" class="input" type="date">
+        <input id="weekDepartmentFilter" class="input" type="search" placeholder="Department" style="min-width: 150px;">
+        <input id="weekSupervisorFilter" class="input" type="search" placeholder="Supervisor" style="min-width: 150px;">
+        <input id="weekSearchInput" class="input" type="search" placeholder="Search..." style="min-width: 180px;">
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Week</th>
+          <th>Employee</th>
+          <th>Department</th>
+          <th>Assigned</th>
+          <th>Completed</th>
+          <th>Overall</th>
+          <th>Comments</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="weekTableBody"><tr><td colspan="8" class="empty-state">Loading...</td></tr></tbody>
+    </table>
+  </div>
+  <div id="weekPagination" class="pagination"></div>
+</section>
+<script>
+  (function () {
+    var state = { items: [], page: 1, pages: 1, pageSize: 25 };
+    function filters() {
+      return {
+        weekStart: document.getElementById('weekStartInput').value,
+        department: document.getElementById('weekDepartmentFilter').value.trim(),
+        supervisor: document.getElementById('weekSupervisorFilter').value.trim(),
+        query: document.getElementById('weekSearchInput').value.trim(),
+        page: state.page,
+        pageSize: state.pageSize
+      };
+    }
+    function load() {
+      KSL.call('listWeeklyProgress', KSL.getSessionToken(), filters()).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Failed to load weekly progress.');
+        var payload = response.data || {};
+        state.items = payload.items || [];
+        state.page = Number((payload.pagination || {}).page || 1);
+        state.pages = Number((payload.pagination || {}).pages || 1);
+        var body = document.getElementById('weekTableBody');
+        if (!state.items.length) {
+          body.innerHTML = '<tr><td colspan="8" class="empty-state">No matching data found.</td></tr>';
+        } else {
+          body.innerHTML = state.items.map(function (item) {
+            return '<tr><td>' + KSL.escapeHtml(item.weekStart + ' to ' + item.weekEnd) + '</td><td>' +
+              KSL.escapeHtml(item.employeeName) + '</td><td>' + KSL.escapeHtml(item.department || '-') +
+              '</td><td>' + item.assigned + '</td><td>' + item.completed + '</td><td>' + item.overall +
+              '</td><td>' + KSL.escapeHtml(item.comments || '-') +
+              '</td><td><button class="btn btn-outline" type="button" data-id="' + KSL.escapeHtml(item.recordId) +
+              '">Review</button></td></tr>';
+          }).join('');
+        }
+        KSL.renderPager('weekPagination', state, load);
+      }).catch(function (error) { KSL.showToast(error.message || 'Failed to load weekly progress.', 'error'); });
+    }
+    function exportFile(format) {
+      var options = filters();
+      options.format = format;
+      KSL.callBusy('exportWeeklyProgress', KSL.getSessionToken(), options).then(function (response) {
+        if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
+        KSL.downloadFile(response.data);
+        KSL.showToast('Report generated.', 'success');
+      }).catch(function (error) { KSL.showToast(error.message || 'Export failed.', 'error'); });
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor'], function () {
+        document.getElementById('weekStartInput').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('generateWeekButton').addEventListener('click', function () {
+          KSL.callBusy('generateWeeklyProgress', KSL.getSessionToken(), { weekStart: document.getElementById('weekStartInput').value })
+            .then(function (response) {
+              if (!response || !response.success) throw new Error((response && response.message) || 'Generate failed.');
+              KSL.showToast(response.message || 'Weekly progress generated.', 'success');
+              load();
+            }).catch(function (error) { KSL.showToast(error.message || 'Generate failed.', 'error'); });
+        });
+        document.getElementById('exportWeekButton').addEventListener('click', function () { exportFile('csv'); });
+        document.getElementById('exportWeekPdfButton').addEventListener('click', function () { exportFile('pdf'); });
+        document.getElementById('refreshWeekButton').addEventListener('click', load);
+        ['weekStartInput', 'weekDepartmentFilter', 'weekSupervisorFilter', 'weekSearchInput'].forEach(function (id) {
+          document.getElementById(id).addEventListener(id === 'weekStartInput' ? 'change' : 'input', KSL.debounce(function () {
+            state.page = 1;
+            load();
+          }, 350));
+        });
+        document.getElementById('weekTableBody').addEventListener('click', function (event) {
+          var button = event.target.closest('button[data-id]');
+          if (!button) return;
+          var comments = window.prompt('Supervisor comments:', '') || '';
+          KSL.call('reviewWeeklyProgress', KSL.getSessionToken(), { recordId: button.dataset.id, comments: comments })
+            .then(function (response) {
+              if (!response || !response.success) throw new Error((response && response.message) || 'Review failed.');
+              KSL.showToast('Review saved.', 'success');
+              load();
+            }).catch(function (error) { KSL.showToast(error.message || 'Review failed.', 'error'); });
+        });
+        load();
+      });
+    });
+  })();
+</script>

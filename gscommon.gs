@@ -2,10 +2,14 @@ var DEFAULT_SESSION_TTL_SECONDS = 21600;
 var SESSION_CACHE_PREFIX = 'SESSION_';
 var ACTIVITY_CACHE_PREFIX = 'ACT_';
 var SETTINGS_CACHE_KEY = 'KSL_SETTINGS_MAP';
+var DIMENSIONS_CACHE_KEY = 'KSL_DIMENSIONS_MAP';
 var EXECUTION_SPREADSHEET_ = null;
 var EXECUTION_SETTINGS_CACHE_ = null;
 var EXECUTION_USERS_CACHE_ = null;
 var EXECUTION_DIMENSIONS_CACHE_ = null;
+var EXECUTION_CREDENTIALS_CACHE_ = null;
+var SCRIPT_LOCK_HELD_ = false;
+var INACTIVE_DIMENSION_PREFIX_ = '[INACTIVE] ';
 var KSL_OFFICIAL_LOGO_URL =
   'https://kenyashipyards.co.ke/wp-content/uploads/2022/06/cropped-KSL-High-quality-Logo-300x273.png';
 
@@ -136,6 +140,9 @@ function readSheetRecords_(schemaOrKey) {
   if (schema.key === 'USERS') {
     EXECUTION_USERS_CACHE_ = records;
   }
+  if (schema.key === 'USER_CREDENTIALS') {
+    EXECUTION_CREDENTIALS_CACHE_ = records;
+  }
 
   return records;
 }
@@ -169,6 +176,10 @@ function normalizeEmail_(email) {
   return normalizeString_(email).toLowerCase();
 }
 
+function normalizeUsername_(username) {
+  return normalizeString_(username).toLowerCase();
+}
+
 function normalizeBoolean_(value) {
   var normalized = normalizeString_(value).toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
@@ -182,22 +193,122 @@ function normalizeNumber_(value, defaultValue) {
   return numberValue;
 }
 
-function generateSequenceId_(prefix) {
+function withScriptLock_(fn) {
+  if (SCRIPT_LOCK_HELD_) {
+    return fn();
+  }
   var lock = LockService.getScriptLock();
-  lock.waitLock(8000);
+  lock.waitLock(20000);
+  SCRIPT_LOCK_HELD_ = true;
   try {
-    var safePrefix = normalizeString_(prefix || 'ID').toUpperCase();
-    var properties = PropertiesService.getScriptProperties();
-    var sequenceKey = 'SEQ_' + safePrefix;
-    var current = normalizeNumber_(properties.getProperty(sequenceKey), 0);
-    var next = current + 1;
-    properties.setProperty(sequenceKey, String(next));
-    var datePart = Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyyyMMdd');
-    var counterPart = String(next).padStart(5, '0');
-    return safePrefix + '-' + datePart + '-' + counterPart;
+    return fn();
   } finally {
+    SCRIPT_LOCK_HELD_ = false;
     lock.releaseLock();
   }
+}
+
+function generateSequenceId_(prefix) {
+  return withScriptLock_(function () {
+    return generateSequenceIdUnlocked_(prefix);
+  });
+}
+
+function generateSequenceIdUnlocked_(prefix) {
+  var safePrefix = normalizeString_(prefix || 'ID').toUpperCase();
+  var properties = PropertiesService.getScriptProperties();
+  var sequenceKey = 'SEQ_' + safePrefix;
+  var current = normalizeNumber_(properties.getProperty(sequenceKey), 0);
+  var next = current + 1;
+  properties.setProperty(sequenceKey, String(next));
+  var datePart = Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyyyMMdd');
+  var counterPart = String(next).padStart(5, '0');
+  return safePrefix + '-' + datePart + '-' + counterPart;
+}
+
+function safeReadSheetRecords_(schemaOrKey) {
+  try {
+    return readSheetRecords_(schemaOrKey);
+  } catch (error) {
+    return [];
+  }
+}
+
+function buildCsvText_(headers, rows) {
+  function escapeCell_(value) {
+    var text = value === null || value === undefined ? '' : String(value);
+    if (/[",\n\r]/.test(text)) {
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+    return text;
+  }
+  var lines = [headers.map(escapeCell_).join(',')];
+  (rows || []).forEach(function (row) {
+    lines.push(
+      headers.map(function (header, index) {
+        if (Array.isArray(row)) {
+          return escapeCell_(row[index]);
+        }
+        return escapeCell_(row[header]);
+      }).join(',')
+    );
+  });
+  return lines.join('\n');
+}
+
+function createPdfFromTable_(title, headers, rows) {
+  var reportTitle = normalizeString_(title) || 'Report';
+  var stamp = Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyyyMMdd-HHmmss');
+  var doc = DocumentApp.create(reportTitle + ' ' + stamp);
+  try {
+    var body = doc.getBody();
+    body.appendParagraph(getSettingValue_('REPORT_ORG_NAME', 'Kenya Shipyards Limited')).setHeading(
+      DocumentApp.ParagraphHeading.HEADING2
+    );
+    body.appendParagraph(reportTitle).setHeading(DocumentApp.ParagraphHeading.HEADING1);
+    body.appendParagraph(
+      'Generated: ' + Utilities.formatDate(new Date(), APP_TIMEZONE, 'dd/MM/yyyy HH:mm') + ' (Africa/Nairobi)'
+    );
+    var tableRows = [headers].concat(
+      (rows || []).map(function (row) {
+        return headers.map(function (header, index) {
+          if (Array.isArray(row)) {
+            return String(row[index] == null ? '' : row[index]);
+          }
+          return String(row[header] == null ? '' : row[header]);
+        });
+      })
+    );
+    if (tableRows.length === 1) {
+      body.appendParagraph('No matching data found.');
+    } else {
+      body.appendTable(tableRows);
+    }
+    doc.saveAndClose();
+    var file = DriveApp.getFileById(doc.getId());
+    var pdf = file.getAs(MimeType.PDF);
+    file.setTrashed(true);
+    return {
+      fileName: reportTitle.replace(/[^\w\-]+/g, '_') + '.pdf',
+      mimeType: 'application/pdf',
+      base64: Utilities.base64Encode(pdf.getBytes())
+    };
+  } catch (error) {
+    try {
+      DriveApp.getFileById(doc.getId()).setTrashed(true);
+    } catch (ignore) {
+      // Best-effort cleanup.
+    }
+    throw new Error('Unable to generate PDF output.');
+  }
+}
+
+function downloadPayload_(fileName, mimeType, content) {
+  return {
+    fileName: fileName,
+    mimeType: mimeType,
+    base64: Utilities.base64Encode(Utilities.newBlob(content, mimeType, fileName).getBytes())
+  };
 }
 
 function toClientDate_(value) {
@@ -284,14 +395,333 @@ function getUserRecordByEmail_(email) {
   return null;
 }
 
+function getUserCredentialRecordByUsername_(username) {
+  var normalized = normalizeUsername_(username);
+  if (!normalized) {
+    return null;
+  }
+  var records = EXECUTION_CREDENTIALS_CACHE_ || readSheetRecords_('USER_CREDENTIALS');
+  for (var index = 0; index < records.length; index += 1) {
+    if (normalizeUsername_(records[index].Username) === normalized) {
+      return records[index];
+    }
+  }
+  return null;
+}
+
+function getUserCredentialRecordByUserId_(userId) {
+  var normalized = normalizeString_(userId);
+  if (!normalized) {
+    return null;
+  }
+  var records = EXECUTION_CREDENTIALS_CACHE_ || readSheetRecords_('USER_CREDENTIALS');
+  for (var index = 0; index < records.length; index += 1) {
+    if (normalizeString_(records[index]['User ID']) === normalized) {
+      return records[index];
+    }
+  }
+  return null;
+}
+
+function getCredentialIndexByUserId_() {
+  var map = {};
+  var records = [];
+  try {
+    records = EXECUTION_CREDENTIALS_CACHE_ || readSheetRecords_('USER_CREDENTIALS');
+  } catch (error) {
+    records = [];
+  }
+  records.forEach(function (record) {
+    var userId = normalizeString_(record['User ID']);
+    if (!userId) {
+      return;
+    }
+    map[userId] = {
+      username: normalizeString_(record.Username),
+      credentialStatus: normalizeString_(record['Credential Status'] || 'Active'),
+      failedAttempts: normalizeNumber_(record['Failed Attempts'], 0),
+      lockoutUntil: toClientDate_(record['Lockout Until'])
+    };
+  });
+  return map;
+}
+
+function isValidUsername_(username) {
+  var normalized = normalizeUsername_(username);
+  return /^[a-z0-9._-]{4,40}$/.test(normalized);
+}
+
+function assertValidUsername_(username) {
+  if (!isValidUsername_(username)) {
+    throw new Error(
+      'Username must be 4-40 characters and use only letters, numbers, dot, underscore, or hyphen.'
+    );
+  }
+}
+
+function deriveNameFromUsername_(username) {
+  var normalized = normalizeUsername_(username);
+  if (!normalized) {
+    return 'User';
+  }
+  var parts = normalized.split(/[._-]+/).filter(Boolean);
+  if (!parts.length) {
+    return normalized;
+  }
+  return parts
+    .map(function (part) {
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(' ');
+}
+
+function deriveNameFromEmail_(email) {
+  var localPart = normalizeEmail_(email).split('@')[0] || '';
+  if (!localPart) {
+    return 'User';
+  }
+  var parts = localPart.split(/[._-]+/).filter(Boolean);
+  if (!parts.length) {
+    return localPart;
+  }
+  return parts
+    .map(function (part) {
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(' ');
+}
+
+function getPasswordMinLength_() {
+  return Math.max(6, normalizeNumber_(getSettingValue_('PASSWORD_MIN_LENGTH', 8), 8));
+}
+
+function getPasswordMaxFailedAttempts_() {
+  return Math.max(3, normalizeNumber_(getSettingValue_('PASSWORD_MAX_FAILED_ATTEMPTS', 5), 5));
+}
+
+function getPasswordLockoutMinutes_() {
+  return Math.max(1, normalizeNumber_(getSettingValue_('PASSWORD_LOCKOUT_MINUTES', 15), 15));
+}
+
+function assertPasswordStrength_(password) {
+  var value = String(password || '');
+  var minLength = getPasswordMinLength_();
+  if (value.length < minLength) {
+    throw new Error('Password must be at least ' + minLength + ' characters.');
+  }
+  if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/[0-9]/.test(value)) {
+    throw new Error('Password must include uppercase, lowercase, and a number.');
+  }
+}
+
+function generatePasswordSalt_() {
+  return Utilities.getUuid().replace(/-/g, '');
+}
+
+function bytesToHex_(bytes) {
+  return bytes
+    .map(function (byte) {
+      var value = byte;
+      if (value < 0) {
+        value += 256;
+      }
+      return value.toString(16).padStart(2, '0');
+    })
+    .join('');
+}
+
+function hashPasswordWithSalt_(password, salt) {
+  var raw = String(salt || '') + '::' + String(password || '');
+  var digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    raw,
+    Utilities.Charset.UTF_8
+  );
+  return bytesToHex_(digest);
+}
+
+function secureEquals_(left, right) {
+  var a = String(left || '');
+  var b = String(right || '');
+  if (!a || !b || a.length !== b.length) {
+    return false;
+  }
+  var mismatch = 0;
+  for (var i = 0; i < a.length; i += 1) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+function verifyCredentialPassword_(credentialRecord, plainPassword) {
+  if (!credentialRecord) {
+    return false;
+  }
+  var expected = normalizeString_(credentialRecord['Password Hash']);
+  var salt = normalizeString_(credentialRecord['Password Salt']);
+  if (!expected || !salt) {
+    return false;
+  }
+  var actual = hashPasswordWithSalt_(plainPassword, salt);
+  return secureEquals_(expected, actual);
+}
+
+function isCredentialActive_(credentialRecord) {
+  return (
+    normalizeString_(credentialRecord && credentialRecord['Credential Status'] || 'Active').toLowerCase() ===
+    'active'
+  );
+}
+
+function getCredentialLockoutUntilDate_(credentialRecord) {
+  var raw = credentialRecord ? credentialRecord['Lockout Until'] : null;
+  if (!raw) {
+    return null;
+  }
+  var dateValue = raw instanceof Date ? raw : new Date(raw);
+  if (isNaN(dateValue.getTime())) {
+    return null;
+  }
+  return dateValue;
+}
+
+function isCredentialCurrentlyLocked_(credentialRecord) {
+  var lockoutUntil = getCredentialLockoutUntilDate_(credentialRecord);
+  return Boolean(lockoutUntil && lockoutUntil.getTime() > Date.now());
+}
+
+function setCredentialPassword_(userId, username, plainPassword, actorId) {
+  var normalizedUserId = normalizeString_(userId);
+  var normalizedUsername = normalizeUsername_(username);
+  var updatedBy = normalizeString_(actorId || normalizedUserId || 'system');
+  if (!normalizedUserId) {
+    throw new Error('userId is required when setting credentials.');
+  }
+  assertValidUsername_(normalizedUsername);
+  assertPasswordStrength_(plainPassword);
+
+  var schema = resolveSchema_('USER_CREDENTIALS');
+  var sheet = getSheetBySchema_(schema);
+  var records = readSheetRecords_(schema);
+  var byUserId = records.find(function (record) {
+    return normalizeString_(record['User ID']) === normalizedUserId;
+  });
+  var byUsername = records.find(function (record) {
+    return normalizeUsername_(record.Username) === normalizedUsername;
+  });
+
+  if (byUsername && normalizeString_(byUsername['User ID']) !== normalizedUserId) {
+    throw new Error('Username is already in use.');
+  }
+
+  var now = new Date();
+  var salt = generatePasswordSalt_();
+  var hash = hashPasswordWithSalt_(plainPassword, salt);
+  var record = byUserId
+    ? Object.assign({}, byUserId)
+    : {
+        'User ID': normalizedUserId,
+        'Created Date': now,
+        'Last Login': ''
+      };
+
+  record.Username = normalizedUsername;
+  record['Password Hash'] = hash;
+  record['Password Salt'] = salt;
+  record['Credential Status'] = 'Active';
+  record['Failed Attempts'] = 0;
+  record['Lockout Until'] = '';
+  record['Last Password Change'] = now;
+  record['Updated Date'] = now;
+  record['Updated By'] = updatedBy;
+
+  if (byUserId) {
+    updateSheetRecordByRow_(sheet, byUserId.__rowNumber, schema.columns, record);
+    record.__rowNumber = byUserId.__rowNumber;
+  } else {
+    appendSheetRecord_(sheet, schema.columns, record);
+    record.__rowNumber = Math.max(getLastPopulatedRow_(sheet), 2);
+  }
+  EXECUTION_CREDENTIALS_CACHE_ = null;
+  return record;
+}
+
+function setUserCredential_(userId, username, plainPassword, actorId) {
+  return setCredentialPassword_(userId, username, plainPassword, actorId);
+}
+
+function clearCredentialFailureState_(credentialRecord, actorId) {
+  if (!credentialRecord || !credentialRecord.__rowNumber) {
+    return credentialRecord;
+  }
+  var needsReset =
+    normalizeNumber_(credentialRecord['Failed Attempts'], 0) > 0 ||
+    normalizeString_(credentialRecord['Lockout Until']) !== '';
+  if (!needsReset) {
+    return credentialRecord;
+  }
+  var schema = resolveSchema_('USER_CREDENTIALS');
+  var sheet = getSheetBySchema_(schema);
+  var updated = Object.assign({}, credentialRecord);
+  updated['Failed Attempts'] = 0;
+  updated['Lockout Until'] = '';
+  updated['Updated Date'] = new Date();
+  updated['Updated By'] = normalizeString_(actorId || credentialRecord['User ID'] || 'system');
+  updateSheetRecordByRow_(sheet, credentialRecord.__rowNumber, schema.columns, updated);
+  updated.__rowNumber = credentialRecord.__rowNumber;
+  EXECUTION_CREDENTIALS_CACHE_ = null;
+  return updated;
+}
+
+function registerCredentialFailedAttempt_(credentialRecord) {
+  if (!credentialRecord || !credentialRecord.__rowNumber) {
+    return {
+      credential: credentialRecord,
+      locked: false,
+      lockoutUntil: null
+    };
+  }
+  var maxAttempts = getPasswordMaxFailedAttempts_();
+  var lockoutMinutes = getPasswordLockoutMinutes_();
+  var schema = resolveSchema_('USER_CREDENTIALS');
+  var sheet = getSheetBySchema_(schema);
+  var updated = Object.assign({}, credentialRecord);
+  var attempts = normalizeNumber_(updated['Failed Attempts'], 0) + 1;
+  var lockoutUntil = null;
+  if (attempts >= maxAttempts) {
+    lockoutUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+    updated['Failed Attempts'] = 0;
+    updated['Lockout Until'] = lockoutUntil;
+  } else {
+    updated['Failed Attempts'] = attempts;
+  }
+  updated['Updated Date'] = new Date();
+  updated['Updated By'] = normalizeString_(credentialRecord['User ID'] || 'system');
+  updateSheetRecordByRow_(sheet, credentialRecord.__rowNumber, schema.columns, updated);
+  updated.__rowNumber = credentialRecord.__rowNumber;
+  EXECUTION_CREDENTIALS_CACHE_ = null;
+  return {
+    credential: updated,
+    locked: Boolean(lockoutUntil),
+    lockoutUntil: lockoutUntil
+  };
+}
+
 function mapUserRecordToSessionUser_(record) {
   if (!record) {
     return null;
+  }
+  var credential = null;
+  try {
+    credential = getUserCredentialRecordByUserId_(record['User ID']);
+  } catch (error) {
+    credential = null;
   }
   return {
     userId: normalizeString_(record['User ID']),
     googleSubjectId: normalizeString_(record['Google Subject ID']),
     email: normalizeEmail_(record['Google Email']),
+    username: normalizeString_(credential ? credential.Username : ''),
     fullName: normalizeString_(record['Full Name']),
     role: normalizeString_(record.Role),
     accountStatus: normalizeString_(record['Account Status']),
@@ -367,7 +797,7 @@ function deleteSession_(sessionToken) {
   CacheService.getScriptCache().remove(SESSION_CACHE_PREFIX + token);
 }
 
-function requireSession_(sessionToken, allowedRoles, requestedPage) {
+function requireSession_(sessionToken, allowedRoles, requestedPage, options) {
   var session = getSessionContext_(sessionToken);
   if (!session || !session.userId) {
     throw new Error('Session expired or invalid. Please sign in again.');
@@ -392,7 +822,10 @@ function requireSession_(sessionToken, allowedRoles, requestedPage) {
     throw new Error('You are not authorized to access the requested page.');
   }
 
-  maybeUpdateUserActivity_(userRecord);
+  var settings = options || {};
+  if (!settings.skipActivity) {
+    maybeUpdateUserActivity_(userRecord);
+  }
   return {
     user: user,
     record: userRecord,
@@ -493,23 +926,18 @@ function getSettingValue_(key, defaultValue) {
   return defaultValue === undefined ? '' : defaultValue;
 }
 
-function getGoogleClientId_() {
-  var scriptPropertyClientId = normalizeString_(
-    PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID')
-  );
-  if (scriptPropertyClientId) {
-    return scriptPropertyClientId;
-  }
-  try {
-    return normalizeString_(getSettingValue_('GOOGLE_CLIENT_ID', ''));
-  } catch (error) {
-    return '';
-  }
-}
-
 function getDimensionValuesMap_() {
   if (EXECUTION_DIMENSIONS_CACHE_) {
     return EXECUTION_DIMENSIONS_CACHE_;
+  }
+  var cached = CacheService.getScriptCache().get(DIMENSIONS_CACHE_KEY);
+  if (cached) {
+    try {
+      EXECUTION_DIMENSIONS_CACHE_ = JSON.parse(cached);
+      return EXECUTION_DIMENSIONS_CACHE_;
+    } catch (error) {
+      EXECUTION_DIMENSIONS_CACHE_ = null;
+    }
   }
   var schema = resolveSchema_('DIMENSIONS');
   var records = [];
@@ -526,7 +954,7 @@ function getDimensionValuesMap_() {
   records.forEach(function (record) {
     schema.columns.forEach(function (columnName) {
       var value = normalizeString_(record[columnName]);
-      if (!value) {
+      if (!value || value.indexOf(INACTIVE_DIMENSION_PREFIX_) === 0) {
         return;
       }
       if (dimensions[columnName].indexOf(value) === -1) {
@@ -536,7 +964,22 @@ function getDimensionValuesMap_() {
   });
 
   EXECUTION_DIMENSIONS_CACHE_ = dimensions;
+  try {
+    CacheService.getScriptCache().put(DIMENSIONS_CACHE_KEY, JSON.stringify(dimensions), 180);
+  } catch (error) {
+    // Cache is best-effort only.
+  }
   return dimensions;
+}
+
+function clearSettingsAndDimensionsCache_() {
+  EXECUTION_SETTINGS_CACHE_ = null;
+  EXECUTION_DIMENSIONS_CACHE_ = null;
+  try {
+    CacheService.getScriptCache().removeAll([SETTINGS_CACHE_KEY, DIMENSIONS_CACHE_KEY]);
+  } catch (error) {
+    // Best-effort only.
+  }
 }
 
 function getDimensionValues_(columnName) {
@@ -545,18 +988,29 @@ function getDimensionValues_(columnName) {
 }
 
 function getUnreadNotificationsCount_(userId) {
+  var normalizedUserId = normalizeString_(userId);
+  if (!normalizedUserId) {
+    return 0;
+  }
+  var cacheKey = 'UNREAD_NTF_' + normalizedUserId;
+  var cached = CacheService.getScriptCache().get(cacheKey);
+  if (cached !== null && cached !== undefined && cached !== '') {
+    return normalizeNumber_(cached, 0);
+  }
   var notificationSchema = KSL_SLICE1_SCHEMAS.NOTIFICATIONS;
   if (!notificationSchema) {
     return 0;
   }
   try {
     var records = readSheetRecords_(notificationSchema);
-    return records.filter(function (record) {
+    var count = records.filter(function (record) {
       return (
-        normalizeString_(record['User ID']) === normalizeString_(userId) &&
+        normalizeString_(record['User ID']) === normalizedUserId &&
         normalizeString_(record['Read Status']).toLowerCase() !== 'read'
       );
     }).length;
+    CacheService.getScriptCache().put(cacheKey, String(count), 90);
+    return count;
   } catch (error) {
     return 0;
   }
@@ -682,6 +1136,54 @@ function createNotification_(userId, employeeId, type, title, message, relatedTa
     'Expiry Date': ''
   };
   appendSheetRecord_(sheet, schema.columns, record);
+}
+
+function findEmployeeByEmail_(email) {
+  var normalized = normalizeEmail_(email);
+  if (!normalized) {
+    return null;
+  }
+  try {
+    return (
+      readSheetRecords_('EMPLOYEES').find(function (record) {
+        return normalizeEmail_(record.Email) === normalized;
+      }) || null
+    );
+  } catch (error) {
+    return null;
+  }
+}
+
+function applyEmployeeDirectoryToUser_(userRecord) {
+  if (!userRecord) {
+    return userRecord;
+  }
+  var employee = findEmployeeByEmail_(userRecord['Google Email']);
+  if (!employee) {
+    return userRecord;
+  }
+  if (normalizeString_(employee['Employment Status']).toLowerCase() === 'inactive') {
+    return userRecord;
+  }
+  if (!normalizeString_(userRecord['Employee ID'])) {
+    userRecord['Employee ID'] = normalizeString_(employee['Employee ID']);
+  }
+  if (!normalizeString_(userRecord.Department)) {
+    userRecord.Department = normalizeString_(employee.Department);
+  }
+  if (!normalizeString_(userRecord['Job Title'])) {
+    userRecord['Job Title'] = normalizeString_(employee['Job Title']);
+  }
+  if (!normalizeString_(userRecord['Supervisor ID'])) {
+    userRecord['Supervisor ID'] = normalizeString_(employee['Supervisor ID']);
+  }
+  var employeeName = normalizeString_(employee['Full Name']);
+  var currentName = normalizeString_(userRecord['Full Name']);
+  var derivedName = deriveNameFromEmail_(userRecord['Google Email']);
+  if (employeeName && (!currentName || currentName === derivedName)) {
+    userRecord['Full Name'] = employeeName;
+  }
+  return userRecord;
 }
 
 function upsertEmployeeFromUser_(userRecord) {

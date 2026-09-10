@@ -1,0 +1,1144 @@
+KENYA SHIPYARDS LIMITED
+TASKS MANAGEMENT SYSTEM
+MASTER DEVELOPMENT PROMPT
+Complete specification for Google Sheets + Google Apps Script + HTML/CSS/JavaScript
+Prepared as a consolidated continuation of the previously supplied task-system response, using the structure and implementation style of the attached PROMPT 1 document and the Kenya Shipyards Tasks Management System database workbook.
+Item
+Specification
+Application
+Kenya Shipyards Limited Tasks Management System
+Database
+Google Sheets
+Backend
+Google Apps Script
+Frontend
+HTML, CSS, JavaScript, Font Awesome, Google Fonts
+Time Zone
+Africa/Nairobi
+Primary Branding
+Sky Blue + Gold
+Workbook
+Kenya Shipyards Tasks Management System
+Core Purpose
+Task creation, assignment, monitoring, progress, reports and employee performance
+PROMPT 1 — INSTRUCTIONS FOR BUILDING THE KENYA SHIPYARDS LIMITED TASKS MANAGEMENT SYSTEM
+1. SYSTEM OVERVIEW
+Build a professional, secure, responsive web-based Tasks Management, Monitoring, Assignment, Progress Reporting and Employee Performance Management System for Kenya Shipyards Limited, a shipbuilding and marine engineering company in Kenya.
+• Allow authorized users, especially supervisors, managers, team leaders and employees, to register through Google, sign in, access role-appropriate modules and maintain their profile.
+• Allow supervisors and authorized managers to create, assign, reassign, monitor, update, review, approve, reject, reopen and soft-delete tasks.
+• Allow tasks to be assigned to one employee, multiple employees and, where configured, teams.
+• Track priorities, categories, task types, departments, sections, teams, dates, hours, progress, blockers, delays and completion notes.
+• Record every meaningful change in immutable task history and system audit logs.
+• Generate daily, weekly and monthly progress snapshots and employee performance evaluations.
+• Provide dashboards and reports with KPIs, charts, filtering, drill-down and printable/PDF output.
+• Provide notifications for assignments, due dates, overdue items, progress reviews, comments and account events.
+• Enforce server-side role and permission checks for every sensitive operation; never rely on hidden buttons as security.
+• Keep data model, business rules and dropdown values configurable through Google Sheets rather than hard-coding operational dimensions.
+2. TECHNOLOGY AND ARCHITECTURE
+• Frontend: HTML5, CSS3 and vanilla JavaScript, with Font Awesome icons and Google Fonts (Poppins, Roboto, Montserrat).
+• Backend: Google Apps Script server-side functions using SpreadsheetApp, LockService, PropertiesService, Utilities, HtmlService, DriveApp where attachments are configured, and appropriate Apps Script services.
+• Database: Google Sheets. Each module writes to its designated sheet/named range and reads only the relevant rows containing data.
+• Rendering: Google Apps Script HTML Service with a reusable template shell. Feature pages are injected into the shell as fragments.
+• Use asynchronous google.script.run calls for CRUD and report operations; show a processing overlay during server operations.
+• Use LockService for ID generation and other multi-user write operations that must be serialized.
+• Use soft delete/Record Status for business records unless the prompt explicitly requires permanent deletion.
+• Use consistent IDs, timestamps and user context across all modules.
+3. BRANDING AND UI DESIGN
+Token
+Value
+Sky Blue
+#38BDF8
+Dark Sky Blue
+#0284C7
+Deep Navy
+#0F172A
+Gold
+#D4AF37
+Light Gold
+#F4E7B2
+White
+#FFFFFF
+Light Grey
+#F8FAFC
+Medium Grey
+#64748B
+Dark Grey
+#334155
+Success
+#16A34A
+Warning
+#F59E0B
+Danger
+#DC2626
+Info
+#0EA5E9
+• Use a corporate shipbuilding/engineering visual identity rather than a generic office or school application.
+• Use a fixed left sidebar and fixed top bar. Only the content area changes between pages.
+• Use responsive cards, compact tables, rounded corners, subtle shadows, consistent spacing, accessible labels and keyboard-friendly modal forms.
+• Use professional icons such as fa-ship, fa-anchor, fa-list-check, fa-users, fa-user-tie, fa-building, fa-chart-line, fa-calendar, fa-clock, fa-file-alt, fa-bell, fa-check-circle, fa-exclamation-triangle, fa-user-shield and fa-gear.
+• Use status badges, progress bars, KPI cards, filter bars, modals, toast/HTML alerts and empty-state messages consistently.
+4. AUTHENTICATION — GOOGLE LOGIN
+• Do not build traditional username/password authentication.
+• Use Google Identity Services (GIS) for the Sign-In experience.
+• Verify the Google ID token on the server before accepting the user as authenticated. Validate issuer, audience/client ID, expiration and appropriate claims.
+• Use the Google sub claim as the immutable User ID. Never use email as the permanent primary key.
+• On first login, create a Pending Approval account and collect/confirm required employment/profile information.
+• Only administrators may activate a pending user and assign Employee ID, Department, Job Title, Role, Supervisor and Account Status.
+• Pending, Suspended and Disabled users must not access operational modules.
+• Revalidate the current authenticated context on sensitive server operations. Never trust role data supplied by the browser.
+5. REUSABLE TEMPLATE — template.html and gstemplate.gs
+Create a single reusable shell. Do not duplicate sidebar or topbar markup in feature modules. Feature pages must be HTML fragments without their own html/head/body wrappers.
+const pageTemplates = { dashboard:'index', mytasks:'mytasks', tasks:'tasks', assignments:'assignments', employees:'employees', teams:'teams', departments:'departments', progress:'progress', monitoring:'monitoring', dailyprogress:'dailyprogress', weeklyprogress:'weeklyprogress', monthlyprogress:'monthlyprogress', reports:'reports', performance:'performance', notifications:'notifications', audit:'audit', users:'users', settings:'settings', login:'login' };
+function include(filename) { return HtmlService.createHtmlOutputFromFile(filename).getContent(); }function getScriptUrl() { return ScriptApp.getService().getUrl(); }
+• Route pages through doGet(e) and whitelist page names.
+• Pass contentTemplate, activePage, pageTitle and appTitle into the reusable template.
+• Provide active navigation state, user profile area, notification badge, logout action and role-aware menu visibility.
+• Keep authorization on the server even when navigation items are hidden in the UI.
+• Maintain centralized helpers for current user context, role checks, session/logout behavior and audit logging.
+6. COMMON MODULE UI STRUCTURE — APPLY TO EVERY FEATURE MODULE
+• Create a main heading row with a left-aligned heading and subheading.
+• Create a navigation/action row with primary buttons on the left and a search/filter area on the right.
+• Create modal forms for create/edit/configure actions. Save and Close buttons are aligned bottom-right.
+• Validate required fields, dates, numbers, percentages, duplicates and business rules before submission.
+• Use a Processing overlay on every Save/Delete/Approve/Reject/Generate action and disable repeat submission until the operation completes.
+• Show success/error messages using a consistent HTML alert/toast component.
+• Refresh affected tables/cards after successful writes without requiring a full browser reload where practical.
+• All list tables display only rows containing meaningful data; ignore blank rows in the named range.
+• Implement pagination (25 entries per page by default), partial-match search, column filters and Clear controls where relevant.
+• Use searchable dropdowns for large dimension lists and populate only non-empty values.
+• For Google Sheets dates, convert Date objects to user-facing MM/DD/YYYY or DD/MM/YYYY consistently; use Africa/Nairobi for timestamps.
+• Action buttons must be permission-aware and every action must be rechecked server-side.
+• Dangerous operations require confirmation dialogs and must write an audit record.
+7. GOOGLE SHEETS DATABASE STRUCTURE
+Create the following sheets and corresponding named ranges. Row 1 contains headers; data begins on Row 2. Use the named range as the module data contract and preserve column order.
+Sheet
+Named Range
+Columns
+Purpose
+Users
+RANGEUSERS
+22
+Authenticated users and roles
+Employees
+RANGEEMPLOYEES
+25
+Employee master records
+Departments
+RANGEDEPARTMENTS
+9
+Organizational departments
+Teams
+RANGETEAMS
+10
+Operational teams
+Tasks
+RANGETASKS
+43
+Core task records
+TaskAssignments
+RANGETASKASSIGNMENTS
+20
+Task-to-employee assignments
+TaskUpdates
+RANGETASKUPDATES
+19
+Historical progress submissions
+TaskComments
+RANGETASKCOMMENTS
+9
+Task comments and replies
+TaskAttachments
+RANGETASKATTACHMENTS
+13
+Task document metadata
+TaskHistory
+RANGETASKHISTORY
+11
+Immutable task change history
+DailyProgress
+RANGEDAILYPROGRESS
+17
+Daily progress snapshots
+WeeklyProgress
+RANGEWEEKLYPROGRESS
+20
+Weekly progress snapshots
+MonthlyProgress
+RANGEMONTHLYPROGRESS
+22
+Monthly progress snapshots
+Performance
+RANGEPERFORMANCE
+26
+Employee performance evaluations
+Notifications
+RANGENOTIFICATIONS
+12
+User notifications
+AuditLog
+RANGEAUDITLOG
+10
+System audit records
+Dimensions
+RANGEDIMENSIONS
+17
+Configurable dropdowns and dimensions
+Settings
+RANGESETTINGS
+9
+Application settings
+8. DATABASE COLUMN DEFINITIONS
+Users — RANGEUSERS
+Columns, in exact storage order:
+1. User ID | 2. Google Subject ID | 3. Google Email | 4. Email Verified | 5. Full Name | 6. Given Name | 7. Family Name | 8. Profile Photo | 9. Hosted Domain | 10. Employee ID | 11. Department | 12. Job Title | 13. Role | 14. Supervisor ID | 15. Account Status | 16. First Login | 17. Last Login | 18. Last Activity | 19. Created By | 20. Created Date | 21. Updated By | 22. Updated Date
+Employees — RANGEEMPLOYEES
+Columns, in exact storage order:
+1. Employee ID | 2. Employee Number | 3. Full Name | 4. First Name | 5. Last Name | 6. Email | 7. Phone | 8. Department | 9. Section | 10. Job Title | 11. Employment Type | 12. Supervisor ID | 13. Supervisor Name | 14. Team | 15. Employment Status | 16. Date Joined | 17. Work Location | 18. Profile Photo | 19. Active Tasks | 20. Completed Tasks | 21. Overdue Tasks | 22. Completion Rate | 23. Performance Score | 24. Created Date | 25. Updated Date
+Departments — RANGEDEPARTMENTS
+Columns, in exact storage order:
+1. Department ID | 2. Department Name | 3. Department Head | 4. Department Description | 5. Status | 6. Created Date | 7. Created By | 8. Updated Date | 9. Updated By
+Teams — RANGETEAMS
+Columns, in exact storage order:
+1. Team ID | 2. Team Name | 3. Department | 4. Team Leader | 5. Team Description | 6. Status | 7. Created Date | 8. Created By | 9. Updated Date | 10. Updated By
+Tasks — RANGETASKS
+Columns, in exact storage order:
+1. Task ID | 2. Parent Task ID | 3. Task Title | 4. Task Description | 5. Department | 6. Section | 7. Team | 8. Task Category | 9. Task Type | 10. Priority | 11. Status | 12. Progress % | 13. Created Date | 14. Created By | 15. Assigned Date | 16. Start Date | 17. Due Date | 18. Completed Date | 19. Estimated Hours | 20. Actual Hours | 21. Assigned By | 22. Primary Assignee | 23. Primary Assignee Name | 24. Supervisor ID | 25. Supervisor Name | 26. Number of Assignees | 27. Delay Reason | 28. Blocker | 29. Blocker Description | 30. Completion Notes | 31. Supervisor Review Status | 32. Supervisor Review Date | 33. Supervisor Review By | 34. Management Review Status | 35. Management Review Date | 36. Task Score | 37. Is Overdue | 38. Days Remaining | 39. Days Overdue | 40. Created Timestamp | 41. Updated Timestamp | 42. Updated By | 43. Record Status
+TaskAssignments — configured above
+Columns, in exact storage order:
+1. Assignment ID | 2. Task ID | 3. Employee ID | 4. Employee Name | 5. Department | 6. Team | 7. Assigned By | 8. Assignment Date | 9. Start Date | 10. Due Date | 11. Assignment Status | 12. Employee Acceptance | 13. Acceptance Date | 14. Employee Progress % | 15. Employee Status | 16. Last Progress Update | 17. Completion Date | 18. Employee Remarks | 19. Created Date | 20. Updated Date
+TaskUpdates — configured above
+Columns, in exact storage order:
+1. Update ID | 2. Task ID | 3. Employee ID | 4. Employee Name | 5. Update Date | 6. Progress % | 7. Previous Progress % | 8. Status | 9. Work Completed | 10. Work Remaining | 11. Challenges | 12. Blockers | 13. Next Action | 14. Hours Worked | 15. Employee Remarks | 16. Supervisor Review | 17. Supervisor Comment | 18. Supervisor Review Date | 19. Created Timestamp
+TaskComments — configured above
+Columns, in exact storage order:
+1. Comment ID | 2. Task ID | 3. Employee ID | 4. Employee Name | 5. Comment | 6. Comment Date | 7. Comment Type | 8. Parent Comment ID | 9. Created Timestamp
+TaskAttachments — configured above
+Columns, in exact storage order:
+1. Attachment ID | 2. Task ID | 3. Employee ID | 4. Employee Name | 5. File Name | 6. File URL | 7. File ID | 8. MIME Type | 9. File Size | 10. Attachment Type | 11. Uploaded Date | 12. Uploaded By | 13. Status
+TaskHistory — configured above
+Columns, in exact storage order:
+1. History ID | 2. Task ID | 3. Action Type | 4. Previous Value | 5. New Value | 6. Changed Field | 7. Changed By | 8. Changed By Name | 9. Change Date | 10. IP/Session Reference | 11. Remarks
+DailyProgress — configured above
+Columns, in exact storage order:
+1. Record ID | 2. Date | 3. Employee ID | 4. Employee Name | 5. Department | 6. Supervisor | 7. Tasks Assigned | 8. Tasks Started | 9. Tasks Completed | 10. Tasks In Progress | 11. Tasks Overdue | 12. Total Hours | 13. Average Progress % | 14. Completion Rate | 15. Performance Score | 16. Supervisor Remarks | 17. Generated Date
+WeeklyProgress — configured above
+Columns, in exact storage order:
+1. Record ID | 2. Week Start | 3. Week End | 4. Employee ID | 5. Employee Name | 6. Department | 7. Supervisor | 8. Tasks Assigned | 9. Tasks Completed | 10. Tasks In Progress | 11. Tasks Overdue | 12. Total Hours | 13. Average Progress % | 14. Completion Rate | 15. Productivity Score | 16. Quality Score | 17. Timeliness Score | 18. Overall Performance Score | 19. Supervisor Comments | 20. Generated Date
+MonthlyProgress — configured above
+Columns, in exact storage order:
+1. Record ID | 2. Month | 3. Year | 4. Employee ID | 5. Employee Name | 6. Department | 7. Supervisor | 8. Tasks Assigned | 9. Tasks Completed | 10. Tasks In Progress | 11. Tasks Overdue | 12. Total Hours | 13. Average Progress % | 14. Completion Rate | 15. Productivity Score | 16. Quality Score | 17. Timeliness Score | 18. Reliability Score | 19. Overall Performance Score | 20. Supervisor Comments | 21. Management Comments | 22. Generated Date
+Performance — RANGEPERFORMANCE
+Columns, in exact storage order:
+1. Performance ID | 2. Evaluation Period | 3. Employee ID | 4. Employee Name | 5. Department | 6. Supervisor | 7. Tasks Assigned | 8. Tasks Completed | 9. Tasks Overdue | 10. Completion Rate | 11. On-Time Completion Rate | 12. Average Progress | 13. Total Hours | 14. Productivity Score | 15. Timeliness Score | 16. Quality Score | 17. Reliability Score | 18. Supervisor Rating | 19. Management Rating | 20. Overall Score | 21. Performance Grade | 22. Strengths | 23. Areas for Improvement | 24. Recommendations | 25. Review Date | 26. Reviewed By
+Notifications — RANGENOTIFICATIONS
+Columns, in exact storage order:
+1. Notification ID | 2. User ID | 3. Employee ID | 4. Notification Type | 5. Title | 6. Message | 7. Related Task ID | 8. Priority | 9. Read Status | 10. Created Date | 11. Read Date | 12. Expiry Date
+AuditLog — RANGEAUDITLOG
+Columns, in exact storage order:
+1. Audit ID | 2. User ID | 3. User Name | 4. Action | 5. Module | 6. Record ID | 7. Description | 8. Old Value | 9. New Value | 10. Timestamp
+Dimensions — RANGEDIMENSIONS
+Columns, in exact storage order:
+1. Departments | 2. Sections | 3. Teams | 4. Job Titles | 5. Task Categories | 6. Task Types | 7. Priorities | 8. Task Statuses | 9. Progress Statuses | 10. Delay Reasons | 11. Completion Reasons | 12. Work Locations | 13. Employment Types | 14. Performance Ratings | 15. Notification Types | 16. Roles | 17. Account Statuses
+Settings — RANGESETTINGS
+Columns, in exact storage order:
+1. Setting Key | 2. Setting Value | 3. Setting Group | 4. Data Type | 5. Description | 6. Editable | 7. Status | 8. Updated Date | 9. Updated By
+9. DIMENSIONS AND CONFIGURATION RULES
+• Populate searchable dropdowns from Dimensions and master sheets. Exclude row 1 header and ignore blank cells.
+• Do not hard-code departments, teams, statuses, priorities, task categories, task types, employment types, performance ratings or notification types into business logic.
+• Use cascading dropdowns where appropriate: Department → Section/Team → Employee/Supervisor.
+• Prevent duplicate dimension values where duplicates would break reporting or selection logic.
+• Allow administrators to activate/deactivate dimension values without deleting historical references.
+• Where settings control formulas or workflow thresholds, read them server-side from Settings.
+PROMPT 2 — AUTHENTICATION AND LOGIN
+Files: login.html and gslogin.gs / gsauth.gs
+Primary data source: Google Sheet “Users” using named range “RANGEUSERS”.
+1. Sheets and named ranges
+• Use Users/RANGEUSERS for registration, approval, role and access state.
+2. Main heading and subheading
+Heading: “Authentication And Login”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Google Sign-In / Account Status / Refresh.
+4. Forms, validations and workflows
+• Render a professional Google Sign-In page with KSL branding, application name, authentication status and processing overlay.
+• When a new Google user is detected, create a Pending Approval record and show profile completion/status information.
+• Only an authorized administrator may approve, suspend or disable accounts.
+• Log first login, last login, last activity and all approval status changes.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+AUTHENTICATION AND LOGIN list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Only authenticated Google accounts may enter. Account management is administrator-only.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 3 — DASHBOARD
+Files: index.html and gsindex.gs
+Primary data source: Google Sheet “Users / Employees / Tasks / Progress” using named range “Multiple ranges”.
+1. Sheets and named ranges
+• Read Tasks, TaskAssignments, TaskUpdates, DailyProgress, WeeklyProgress, MonthlyProgress, Performance, Employees, Departments and Notifications as required. Do not duplicate data unnecessarily.
+2. Main heading and subheading
+Heading: “Dashboard”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Refresh Dashboard / Date Range / Department / Supervisor / Export.
+4. Forms, validations and workflows
+• Show KPI cards for total tasks, assigned tasks, in-progress, completed, overdue, blocked, due soon, average progress and completion rate.
+• Show charts for status distribution, department performance, completion trend, overdue trend and employee performance where authorized.
+• All dashboard values must be calculated from current sheet records or the generated progress/performance snapshots.
+• Filters must update KPI cards and charts together.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+DASHBOARD list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Dashboard metrics must be scoped to the user’s authorization level.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 4 — MY TASKS
+Files: mytasks.html and gsm - gsmytasks.gs
+Primary data source: Google Sheet “TaskAssignments / Tasks” using named range “RANGETASKASSIGNMENTS / RANGETASKS”.
+1. Sheets and named ranges
+• Read TaskAssignments / Tasks and its related assignment/update data to calculate the logged-in user’s authorized view.
+2. Main heading and subheading
+Heading: “My Tasks”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New Update / My Overdue / Due Soon / Refresh.
+4. Forms, validations and workflows
+• Show only tasks assigned to the authenticated employee, plus authorized tasks where the user is supervisor/team leader.
+• Allow the employee to accept/reject assignment where configured, update progress, status, hours, work completed, blockers, next action and remarks.
+• Prevent progress values below 0 or above 100.
+• Completion must require 100% progress and completion notes unless a setting explicitly changes the rule.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+MY TASKS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Employees edit their own assignments/updates; supervisors manage their supervised scope; managers/admins may view broader scope.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 5 — TASK MANAGEMENT
+Files: tasks.html and gstasks.gs
+Primary data source: Google Sheet “Tasks” using named range “RANGETASKS”.
+1. Sheets and named ranges
+• Use Tasks / RANGETASKS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Task Management”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New Task / Status / Priority / Department / Export.
+4. Forms, validations and workflows
+• New Task popup must support Task Title, Description, Department, Section, Team, Category, Type, Priority, Status, dates, estimated hours, assignee/supervisor and optional Parent Task.
+• Generate a unique Task ID server-side. Never trust a browser-supplied ID.
+• Validate Due Date >= Start Date. Prevent invalid hours and percentages.
+• Support edit, archive/soft-delete, reopen, approve/reject and view-details operations according to role.
+• When a task is created or materially changed, write TaskHistory and AuditLog and generate notifications where applicable.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+TASK MANAGEMENT list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Task creation/edit/assignment/reopen/delete operations require explicit role permissions.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 6 — TASK ASSIGNMENTS
+Files: assignments.html and gsassignments.gs
+Primary data source: Google Sheet “TaskAssignments” using named range “RANGETASKASSIGNMENTS”.
+1. Sheets and named ranges
+• Use TaskAssignments / RANGETASKASSIGNMENTS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Task Assignments”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New Assignment / Pending Acceptance / Reassign / Refresh.
+4. Forms, validations and workflows
+• Support one-to-many assignment using TaskAssignments while maintaining one primary assignee on the Tasks record.
+• Allow assigning employee(s) from active Employees filtered by Department/Team.
+• Populate assignment dates from task defaults but allow authorized adjustment.
+• Notify each assignee and record assignment changes in history/audit.
+• Require employee acceptance only when the setting requires it; track acceptance status/date.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+TASK ASSIGNMENTS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Assignments are restricted to supervisors, team leaders and authorized managers/admins.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 7 — EMPLOYEE MANAGEMENT
+Files: employees.html and gsemployees.gs
+Primary data source: Google Sheet “Employees” using named range “RANGEEMPLOYEES”.
+1. Sheets and named ranges
+• Use Employees / RANGEEMPLOYEES as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Employee Management”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New Employee / Status / Department / Supervisor / Export.
+4. Forms, validations and workflows
+• Provide create/edit/view employee profile forms.
+• Employee ID must be unique and stable. Department, section, supervisor and team must be searchable dropdowns.
+• Display calculated Active Tasks, Completed Tasks, Overdue Tasks, Completion Rate and Performance Score as read-only values.
+• Do not allow editing calculated metrics directly.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+EMPLOYEE MANAGEMENT list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Employee master-data editing is administrator/HR-authorized.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 8 — TEAM MANAGEMENT
+Files: teams.html and gsteams.gs
+Primary data source: Google Sheet “Teams” using named range “RANGETEAMS”.
+1. Sheets and named ranges
+• Use Teams / RANGETEAMS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Team Management”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New Team / Department / Team Leader / Refresh.
+4. Forms, validations and workflows
+• Provide create/edit/archive forms with required identifiers and names.
+• Prevent deactivation of a department/team when active records depend on it unless an explicit reassignment workflow is used.
+• Use master-data status to hide inactive values from new-entry dropdowns while retaining them in historical records.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+TEAM MANAGEMENT list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Team master-data editing is admin/department-head authorized as configured.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 9 — DEPARTMENT MANAGEMENT
+Files: departments.html and gsdepartments.gs
+Primary data source: Google Sheet “Departments” using named range “RANGEDEPARTMENTS”.
+1. Sheets and named ranges
+• Use Departments / RANGEDEPARTMENTS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Department Management”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New Department / Status / Department Head / Refresh.
+4. Forms, validations and workflows
+• Provide create/edit/archive forms with required identifiers and names.
+• Prevent deactivation of a department/team when active records depend on it unless an explicit reassignment workflow is used.
+• Use master-data status to hide inactive values from new-entry dropdowns while retaining them in historical records.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+DEPARTMENT MANAGEMENT list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Department master-data editing is admin/management authorized.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 10 — PROGRESS UPDATES
+Files: progress.html and gsprogress.gs
+Primary data source: Google Sheet “TaskUpdates” using named range “RANGETASKUPDATES”.
+1. Sheets and named ranges
+• Use TaskUpdates / RANGETASKUPDATES as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Progress Updates”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New Progress Update / Pending Review / Refresh.
+4. Forms, validations and workflows
+• Employees submit progress updates into TaskUpdates; every submission creates a historical row and never overwrites prior updates.
+• Capture progress, previous progress, status, work completed, work remaining, challenges, blockers, next action, hours worked and remarks.
+• Supervisors can review, comment, approve or reject updates according to role.
+• On submission, update the current task/assignment summary fields and create notifications for the supervisor.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+PROGRESS UPDATES list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Employees create their own updates; supervisors review their scope.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 11 — TASK MONITORING
+Files: monitoring.html and gsmonitoring.gs
+Primary data source: Google Sheet “Tasks” using named range “RANGETASKS”.
+1. Sheets and named ranges
+• Read Tasks and its related assignment/update data to calculate the logged-in user’s authorized view.
+2. Main heading and subheading
+Heading: “Task Monitoring”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Overdue / Due Soon / Blocked / In Progress / Refresh.
+4. Forms, validations and workflows
+• Provide supervisory monitoring views by department, section, team, supervisor, assignee, status, priority and due-date window.
+• Calculate overdue using current Nairobi date/time and task due date; never rely on stale manually typed flags.
+• Highlight blocked tasks and tasks with no recent progress update.
+• Provide drill-down to task detail, assignment history, progress history, comments and attachments.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+TASK MONITORING list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Monitoring scope is derived from role and reporting structure.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 12 — DAILY PROGRESS
+Files: dailyprogress.html and gsdailyprogress.gs
+Primary data source: Google Sheet “DailyProgress” using named range “RANGEDAILYPROGRESS”.
+1. Sheets and named ranges
+• Use DailyProgress / RANGEDAILYPROGRESS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Daily Progress”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Generate Today / Date / Department / Supervisor / Export.
+4. Forms, validations and workflows
+• Generate daily snapshots for each active employee and optionally for teams/departments.
+• Calculate task counts, hours, progress, completion rate and performance measures from transactional data; do not manually type calculated totals.
+• Allow regeneration for a selected period using a controlled upsert strategy so duplicate snapshots are not created.
+• Show supervisor comments and allow authorized review before finalization.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+DAILY PROGRESS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Daily snapshots may be generated by supervisors/managers/admins; employees see authorized self-data.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 13 — WEEKLY PROGRESS
+Files: weeklyprogress.html and gsweeklyprogress.gs
+Primary data source: Google Sheet “WeeklyProgress” using named range “RANGEWEEKLYPROGRESS”.
+1. Sheets and named ranges
+• Use WeeklyProgress / RANGEWEEKLYPROGRESS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Weekly Progress”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Generate Week / Week Range / Department / Supervisor / Export.
+4. Forms, validations and workflows
+• Generate weekly snapshots for each active employee and optionally for teams/departments.
+• Calculate task counts, hours, progress, completion rate and performance measures from transactional data; do not manually type calculated totals.
+• Allow regeneration for a selected period using a controlled upsert strategy so duplicate snapshots are not created.
+• Show supervisor comments and allow authorized review before finalization.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+WEEKLY PROGRESS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Weekly snapshots may be generated/reviewed by supervisors/managers/admins.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 14 — MONTHLY PROGRESS
+Files: monthlyprogress.html and gsmonthlyprogress.gs
+Primary data source: Google Sheet “MonthlyProgress” using named range “RANGEMONTHLYPROGRESS”.
+1. Sheets and named ranges
+• Use MonthlyProgress / RANGEMONTHLYPROGRESS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Monthly Progress”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Generate Month / Month / Department / Supervisor / Export.
+4. Forms, validations and workflows
+• Generate monthly snapshots for each active employee and optionally for teams/departments.
+• Calculate task counts, hours, progress, completion rate and performance measures from transactional data; do not manually type calculated totals.
+• Allow regeneration for a selected period using a controlled upsert strategy so duplicate snapshots are not created.
+• Show supervisor comments and allow authorized review before finalization.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+MONTHLY PROGRESS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Monthly snapshots and comments require supervisor/management authorization.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 15 — REPORTS
+Files: reports.html and gsreports.gs
+Primary data source: Google Sheet “All reporting sheets” using named range “All report ranges”.
+1. Sheets and named ranges
+• Use All reporting sheets / All report ranges as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Reports”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Generate Report / Report Type / Date Range / Department / Employee / Export PDF.
+4. Forms, validations and workflows
+• Provide report type selection including Task Register, Outstanding Tasks, Overdue Tasks, Daily Progress, Weekly Progress, Monthly Progress, Department Performance, Supervisor/Team Performance, Employee Performance, Assignment Report and Audit Summary.
+• Provide date range, department, section, team, supervisor, employee, status and priority filters as applicable.
+• Display report preview in a professional table/card layout and provide print/PDF/export options.
+• Use server-side authorization to restrict confidential HR/performance reports.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+REPORTS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• General operational reports may be broader; employee-performance/HR reports are restricted.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 16 — EMPLOYEE PERFORMANCE
+Files: performance.html and gsperformance.gs
+Primary data source: Google Sheet “Performance” using named range “RANGEPERFORMANCE”.
+1. Sheets and named ranges
+• Use Performance / RANGEPERFORMANCE as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Employee Performance”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Generate Evaluation / Period / Department / Supervisor / Employee / Export.
+4. Forms, validations and workflows
+• Evaluate employees using configurable Productivity, Timeliness, Quality and Reliability measures plus Supervisor and Management ratings.
+• Calculate Overall Score and Performance Grade using configurable weights and grade thresholds from Settings/Dimensions.
+• Provide comparison by employee, department, supervisor and evaluation period.
+• Allow authorized reviewers to enter Strengths, Areas for Improvement and Recommendations.
+• Do not overwrite completed historical evaluations; corrections should be auditable.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+EMPLOYEE PERFORMANCE list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Performance records are confidential and restricted to authorized management/HR/supervisors.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 17 — NOTIFICATIONS
+Files: notifications.html and gsnotifications.gs
+Primary data source: Google Sheet “Notifications” using named range “RANGENOTIFICATIONS”.
+1. Sheets and named ranges
+• Use Notifications / RANGENOTIFICATIONS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Notifications”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Mark All Read / Unread / Priority / Type / Refresh.
+4. Forms, validations and workflows
+• Display notifications newest-first with unread badges and priority indicators.
+• Allow opening the related task or module directly from a notification.
+• Support mark read, mark all read and expiry handling.
+• Generate notifications from server-side events, not browser-only logic.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+NOTIFICATIONS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Users see their own notifications; privileged service code creates them.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 18 — AUDIT LOG
+Files: audit.html and gsaudit.gs
+Primary data source: Google Sheet “AuditLog” using named range “RANGEAUDITLOG”.
+1. Sheets and named ranges
+• Use AuditLog / RANGEAUDITLOG as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “Audit Log”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Filter / Date Range / User / Module / Action / Export.
+4. Forms, validations and workflows
+• Provide read-only audit search by date range, user, module, action and record ID.
+• Never permit ordinary users to modify or delete audit records.
+• Include before/after values for material changes and timestamps in Africa/Nairobi.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+AUDIT LOG list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Audit records are read-only and restricted to authorized administrators/management.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 19 — USER MANAGEMENT
+Files: users.html and gsusers.gs
+Primary data source: Google Sheet “Users” using named range “RANGEUSERS”.
+1. Sheets and named ranges
+• Use Users / RANGEUSERS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “User Management”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: New User / Approval Queue / Role / Department / Status / Refresh.
+4. Forms, validations and workflows
+• Provide administrator-only user account management.
+• Approve, suspend, disable and reactivate users; assign employee, department, job title, role and supervisor.
+• Show login/activity timestamps and maintain a complete audit trail.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+USER MANAGEMENT list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• User approval and role assignment is administrator-only.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+PROMPT 20 — SYSTEM SETTINGS
+Files: settings.html and gssettings.gs
+Primary data source: Google Sheet “Settings / Dimensions” using named range “RANGESETTINGS / RANGEDIMENSIONS”.
+1. Sheets and named ranges
+• Use Settings / Dimensions / RANGESETTINGS / RANGEDIMENSIONS as the authoritative storage contract for this module.
+2. Main heading and subheading
+Heading: “System Settings”
+Use a concise operational subheading describing the purpose of the page.
+3. Navigation buttons and search/filter bar
+Required controls: Save Settings / Dimensions / Backup / Rebuild Config / Refresh.
+4. Forms, validations and workflows
+• Provide administrator configuration for application title, date formats, notification thresholds, performance weights, pagination size and workflow rules.
+• Provide CRUD for Dimensions values with safe deactivation.
+• Use Setting Data Type to parse Boolean, Number, Percentage, Text and Date values correctly.
+• Record all configuration changes in AuditLog.
+5. Save / update / delete processing sequence
+• Validate on the client for usability and again on the server for security and integrity.
+• Acquire a script lock for ID generation and multi-record writes.
+• Write the primary record(s) in the correct sheet/named range.
+• Write dependent records such as assignments, updates, history, comments, notifications and audit entries as required.
+• Recalculate affected summary fields after the write.
+• Release the lock in a finally block.
+• Return a structured success/error object to the client and refresh the relevant UI.
+6. Search, filters, pagination and table rendering
+SYSTEM SETTINGS list HTML table
+• Render headers and all populated data rows from the named range.
+• Ignore blank rows and do not render phantom records.
+• Provide pagination with 25 records per page unless a module explicitly needs another size.
+• Provide column-aware partial-match search and Clear control.
+• Render dates cleanly and use visual badges/progress bars for status/progress fields.
+• Add permission-aware Action buttons such as View, Edit, Assign, Review, Delete/Archive or Generate as applicable.
+7. Authorization rules
+• Settings and dimensions are administrator-only unless individual permissions are explicitly configured.
+8. Success/error messages and edge cases
+• Use explicit, user-friendly messages such as “New Task Created”, “Task Updated”, “Assignment Saved”, “Progress Update Submitted”, “Report Generated”, “Access Denied” and “No matching data found”.
+• Validate missing required fields, invalid dates, negative hours, invalid percentages, duplicate IDs, inactive employees, unauthorized scopes and references to non-existent records.
+• Gracefully handle deleted/archived referenced records in historical data.
+• Never expose raw server stack traces to end users; log technical details server-side and return safe messages.
+9. Developer instruction
+ACT AS A PROFESSIONAL GOOGLE SHEETS APPS SCRIPT DEVELOPER. THOROUGHLY ANALYZE THE INSTRUCTIONS AND PROVIDE COMPLETE AND WORKING HTML, CSS, JAVASCRIPT, AND .GS CODE FOR THIS MODULE. REMEMBER TO CONSULT GOOGLE APPS SCRIPT DOCUMENTATION IF YOU ARE UNSURE ABOUT ANYTHING. Reference: https://developers.google.com/apps-script
+21. DETAILED TASK BUSINESS RULES
+• Progress % must be numeric and constrained from 0 to 100.
+• Is Overdue is TRUE when the task is active, the due date has passed in Africa/Nairobi, and completion criteria are not satisfied.
+• Days Remaining is the positive difference between Due Date and current Nairobi date for non-overdue active tasks; Days Overdue is the positive difference for overdue tasks.
+• Completed Date is populated when the task reaches the configured completion status or approved completion workflow.
+• If a completed task is reopened, preserve the historical completed event and clear/recalculate active-state fields as appropriate.
+• Primary Assignee must refer to an active Employee record unless an explicit historical/archived exception is supported.
+• Number of Assignees must equal the current active assignment count for the task.
+• Task Score must be derived from configured performance logic and should not be casually typed into the task form.
+• Delay Reason and Blocker should become required when a task is materially delayed or blocked, based on configurable workflow rules.
+• Actual Hours should reflect submitted/approved work hours according to the configured update workflow.
+• Parent Task ID may be blank for a top-level task; child tasks must reference an existing task.
+22. COMMENTS, ATTACHMENTS AND HISTORY
+Task comments
+• Support chronological task discussion, supervisor feedback and replies using Parent Comment ID.
+• Restrict deletion/editing of comments according to role and preserve auditability.
+Task attachments
+• Use Drive/attachment metadata as configured. Store file metadata in TaskAttachments; do not embed binary data in cells.
+• Validate task reference, file type/size constraints, uploader identity and authorization.
+• Allow View/Open/Remove metadata actions according to permissions; never break the audit trail when an attachment is removed.
+Task history
+• Every create, assignment, reassignment, edit, status change, priority change, due-date change, progress update, completion, reopen, delete/archive, approve and reject action must create a history row.
+• Do not overwrite historical TaskHistory rows. Treat TaskHistory as immutable.
+23. DASHBOARD KPI AND REPORTING LOGIC
+KPI
+Definition
+Total Tasks
+Count of active/non-archived tasks within authorized scope
+Assigned Tasks
+Tasks with at least one active assignment
+In Progress
+Tasks whose configured status indicates active execution
+Completed
+Tasks whose configured status indicates completion
+Overdue
+Active tasks past due date
+Blocked
+Tasks flagged with blockers/blocker description
+Due Soon
+Active tasks within the configured due-soon threshold
+Average Progress
+Average Progress % over authorized active tasks or selected period
+Completion Rate
+Completed tasks divided by tasks due/assigned in selected period, according to report definition
+On-Time Completion
+Completed tasks completed on/before Due Date divided by completed tasks
+Productivity Score
+Configured measure combining completion volume/hours/progress
+Timeliness Score
+Configured measure using due-date adherence
+Quality Score
+Configured measure using supervisor/management review and approved quality rating
+Reliability Score
+Configured measure using consistency, overdue frequency and update compliance
+24. PERFORMANCE SCORING CONFIGURATION
+• Do not hard-code final weights or grade thresholds. Store weights/thresholds in Settings and Dimensions.
+• Support configurable weighted scoring such as Productivity + Timeliness + Quality + Reliability + supervisor/management ratings.
+• Store the final score and grade with the evaluation snapshot so historical reports remain stable if future configuration changes.
+• Show score components so managers can understand why an employee received a grade.
+25. REPORT OUTPUT AND PDF REQUIREMENTS
+• Use a dedicated printable report layout with KSL branding, report title, reporting period, filters, generated date, generated by and page footer.
+• Use professional tables with repeating header rows where possible.
+• Provide PDF generation through Apps Script/HTML output methods supported by the environment; do not depend on unsupported browser-only APIs.
+• For confidential reports, enforce server-side authorization before generating the file.
+• Use Africa/Nairobi timestamps in reports.
+26. DATA INTEGRITY, CONCURRENCY AND ERROR HANDLING
+• Use LockService for sequential IDs and composite writes that must be atomic from the application perspective.
+• Before update/delete, re-read the target record server-side and verify it still exists and the current user is authorized.
+• Prefer soft deletion with Record Status = Archived/Deleted for transactional records.
+• Never write formulas or summary values from the browser when the server can calculate them reliably.
+• Use consistent server helper functions for date parsing, safe strings, IDs, row lookup, named-range access, audit writing and role checking.
+• Always release locks in finally blocks and return structured errors.
+27. FINAL FILE STRUCTURE
+File
+Purpose
+template.html
+Reusable application shell, sidebar, topbar, navigation, shared UI utilities
+gstemplate.gs
+Routing, template helpers, user context, logout, centralized audit and authorization helpers
+login.html
+Google login and registration/status interface
+gslogin.gs / gsauth.gs
+Authentication, user provisioning and server-side authorization support
+index.html / gsindex.gs
+Dashboard
+mytasks.html / gsmytasks.gs
+Employee task workspace
+tasks.html / gstasks.gs
+Core task CRUD and lifecycle
+assignments.html / gsassignments.gs
+Task-to-employee assignment management
+employees.html / gsemployees.gs
+Employee master-data management
+teams.html / gsteams.gs
+Team master-data management
+departments.html / gsdepartments.gs
+Department master-data management
+progress.html / gsprogress.gs
+Progress update submission and supervisor review
+monitoring.html / gsmonitoring.gs
+Operational task monitoring and exception views
+dailyprogress.html / gsdailyprogress.gs
+Daily progress snapshots and reports
+weeklyprogress.html / gsweeklyprogress.gs
+Weekly progress snapshots and reports
+monthlyprogress.html / gsmonthlyprogress.gs
+Monthly progress snapshots and reports
+reports.html / gsreports.gs
+General reporting and PDF/print output
+performance.html / gsperformance.gs
+Employee performance evaluation and comparison
+notifications.html / gsnotifications.gs
+Notification center
+audit.html / gsaudit.gs
+Audit log viewing
+users.html / gsusers.gs
+User approval and role management
+settings.html / gssettings.gs
+Application settings and dimensions
+28. IMPLEMENTATION CHECKLIST
+• Create/verify all Sheets and named ranges before coding feature pages.
+• Create the reusable template first, then authentication, then master data, then task lifecycle, then reporting/performance modules.
+• Use exact sheet names and column order specified in this prompt.
+• Keep all feature-page HTML as injected fragments; do not duplicate the global shell.
+• Implement server-side authorization on every create/update/delete/review/approval/report operation.
+• Implement audit and task-history logging before enabling destructive operations.
+• Ensure all list views ignore blank rows, paginate, search and refresh correctly.
+• Ensure all date fields are handled as Date objects server-side and formatted for display client-side.
+• Ensure multi-assignee assignments and historical progress are modeled as separate records.
+• Ensure dashboard KPIs and performance scores are calculated from transactional records or controlled snapshots.
+• Test concurrent saves, duplicate clicks, invalid values, unauthorized access, stale records, empty ranges and archived references.
+• Confirm Google Apps Script web-app deployment and permissions are appropriate for the intended organization.
+29. SOURCE/REFERENCE BASIS
+This master prompt consolidates the supplied PROMPT 1 document structure, the previously developed Kenya Shipyards Limited Tasks Management System prompt, the existing task-management database workbook/range register, and the reusable template/audit architecture. The resulting prompt is intended to be used as the master specification for generating the complete application module-by-module.

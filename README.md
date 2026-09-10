@@ -1,139 +1,168 @@
 # Kenya Shipyards Limited — Tasks Management System
 
-A web-based system for **Kenya Shipyards Limited (KSL)** to create, assign, monitor, and report on operational tasks.
+Web-based operational task system for **Kenya Shipyards Limited (KSL)** using:
+- **Database:** Google Sheets
+- **Backend:** Google Apps Script
+- **Frontend:** HTML/CSS/JavaScript fragments rendered inside a shared template
 
-KSL is a state company under the **Ministry of Defence**. This application supports supervisors, managers, team leaders, and employees in day-to-day work: who is doing what, by when, and how far it has progressed.
+Timezone is **Africa/Nairobi**.
 
-**Official site:** [kenyashipyards.co.ke](https://kenyashipyards.co.ke/)
+## Authentication Mode (Current)
 
----
+This version uses **classic username/password authentication** with:
+- self-registration (new users start as **Pending Approval**)
+- administrator approval and role assignment
+- server-side password hashing and temporary lockout after repeated failed attempts
 
-## What this system does
+Google OAuth / GIS sign-in is no longer required in this branch.
 
-| Area | Purpose |
-|------|---------|
-| **Access control** | Google sign-in, pending approval, roles (Administrator, Manager, Supervisor, Team Leader, Employee) |
-| **Organisation** | Departments used when creating and reporting on tasks |
-| **Tasks** | Create, edit, archive, and reopen work items with dates, priority, progress, and blockers |
-| **Assignments** | Assign a task to one or more employees and set a primary assignee |
-| **My Tasks** | Employees see their own work, accept or reject assignments, and submit progress |
-| **Progress** | Immutable progress history; supervisors can approve or reject updates |
-| **Monitoring** | Supervisory view of overdue, due soon, blocked, and in-progress work |
-| **Dashboard** | Role-scoped counts (total, assigned, in progress, completed, overdue) |
-| **Audit** | Server-side log of important create / update / archive / approval actions |
+## What Works Now
 
-Data is stored in **Google Sheets**. The user interface is a **Google Apps Script web app** (HTML/CSS/JavaScript). Timezone: **Africa/Nairobi**.
+- Username/password registration and login
+- User approval, New User create, suspend/disable, and admin password reset
+- Employees, Teams, and Departments master-data
+- Task management with comments, attachments, history, and export
+- Multi-assignee assignments
+- My Tasks and on-page progress updates
+- Daily / Weekly / Monthly snapshot generation and review
+- Reports preview with CSV and server-side PDF export
+- Employee performance scoring from Settings weights
+- Notifications center and Audit viewer
+- Settings and Dimensions administration
+- Dashboard KPIs, filters, charts, and export
 
----
+## Important Runtime Note
 
-## Who uses it
+Files such as `index.html` are **not standalone web pages**. They are page fragments included by `template.html` in Apps Script.
 
-- **Administrator** — users, departments, all operational modules  
-- **Manager / Supervisor / Team Leader** — tasks, assignments, progress review, monitoring  
-- **Employee** — dashboard and **My Tasks** only (until given a higher role)
+Open the deployed Apps Script web app URL (for example `.../exec?page=login`) to use the system.
 
-New Google accounts start as **Pending Approval**. An administrator must assign Employee ID, department, job title, and role before they can use operational pages.
+## Beginner Setup (Detailed)
 
----
+### 1) Create the database spreadsheet
 
-## What works now vs later
+1. Create a Google Sheet named `Kenya Shipyards Tasks Management System`.
+2. Copy the sheet ID from the URL (the text between `/d/` and `/edit`).
+3. Open **Extensions -> Apps Script** from that sheet.
 
-**Working now (Slice 1 + Phase 2)**
+### 2) Copy code files into Apps Script
 
-- Login and user approval  
-- Departments  
-- Task management  
-- Assignments, My Tasks, Progress updates, Monitoring  
-- Dashboard and branding (official KSL logo)
+Copy all files from this project:
+- all `.gs` files
+- all `.html` files
+- `appsscript.json`
 
-**Not built yet (later phases)**
+If `appsscript.json` is hidden in Apps Script:
+1. Open **Project Settings**.
+2. Enable **Show "appsscript.json" manifest file in editor**.
+3. Paste the manifest content.
 
-- Full Employees / Teams admin screens  
-- Notifications centre page  
-- Audit log viewer and Settings UI  
-- Daily / weekly / monthly snapshots  
-- Reports, PDF export, performance scoring  
-- Comments, Drive attachments, parent/child tasks  
+### 3) Configure script properties
 
----
+In Apps Script:
+1. Open **Project Settings**.
+2. Scroll to **Script properties**.
+3. Add:
+   - `DATABASE_SPREADSHEET_ID` = your sheet ID (optional if bound to same sheet)
 
-## Important: this is not a normal website folder
+No Google OAuth client ID is needed for this auth mode.
 
-Files such as `index.html` are **page fragments**. They are injected into `template.html` by Apps Script.
+### 4) Bootstrap sheets and defaults
 
-- Opening `index.html` in Cursor or a browser **will not** show the real app.  
-- The live UI is the **web app URL** after you deploy (for example `.../exec?page=login`).
+Run these functions in Apps Script editor:
 
----
+1. `bootstrapMvpSlice1Database`
+2. `repairWorkbookPerformance`
 
-## Beginner setup
+### 5) Create first administrator user record
 
-### 1. Create the spreadsheet
-
-1. Create a Google Sheet named `Kenya Shipyards Tasks Management System`.  
-2. Copy the Sheet ID from the URL (`/d/`**THIS_PART**`/edit`).  
-3. Open **Extensions → Apps Script**.
-
-### 2. Copy this repository into Apps Script
-
-Copy every `.gs` file, every `.html` file, and `appsscript.json` into the Apps Script project. Save.
-
-### 3. Script properties
-
-**Project Settings → Script properties:**
-
-| Name | Value |
-|------|--------|
-| `DATABASE_SPREADSHEET_ID` | Your Sheet ID (optional if the script is bound to that sheet) |
-| `GOOGLE_CLIENT_ID` | Leave empty (Apps Script session login). GIS OAuth origins are often blocked on `script.google.com`. |
-
-### 4. Create sheets and the first admin
-
-In the Apps Script editor, run these **in order**:
-
-1. `bootstrapMvpSlice1Database` — creates sheets, headers, named ranges, and seed data.  
-2. `repairWorkbookPerformance` — trims extra empty rows (keeps the app fast).  
-3. Add a helper and run it (use **your** Google email):
+Run:
 
 ```javascript
-function runAdminSetup() {
+function runAdminUserBootstrap() {
   return bootstrapFirstAdminByEmail({
-    email: "youremail@gmail.com",
-    fullName: "Your Name",
+    email: "admin@yourcompany.com",
+    fullName: "System Administrator",
     employeeId: "EMP-001",
-    department: "Engineering"
+    department: "Engineering",
+    jobTitle: "Administrator"
   });
 }
 ```
 
-### 5. Deploy the web app
+### 6) Create first administrator credentials
 
-1. **Deploy → New deployment → Web app**  
-2. Execute as: **User accessing the web app**  
-3. Who has access: **Anyone with a Google account** (or your organisation)  
-4. Open the URL with `?page=login`  
-5. Click **Sign in with Google account**
+Run:
 
-After later code changes: **Manage deployments → pencil → New version → Deploy**, then **Ctrl + F5**.
+```javascript
+function runAdminCredentialsBootstrap() {
+  return bootstrapFirstAdminCredentials({
+    email: "admin@yourcompany.com",
+    username: "admin.ksl",
+    password: "Admin12345"
+  });
+}
+```
 
----
+Password rules are enforced from settings (default minimum 8 chars with uppercase/lowercase/number).
 
-## Project files
+### 7) Deploy web app
 
-| File | Role |
-|------|------|
-| `appsscript.json` | Apps Script manifest (timezone, scopes) |
-| `gsbootstrap.gs` | Workbook schema, seed data, first admin, performance repair |
-| `gscommon.gs` | Sheets helpers, sessions, roles, audit, notifications |
-| `gstemplate.gs` | Routing (`doGet`) and shell |
-| `gsauth.gs` / `gslogin.gs` | Login |
-| `gsusers.gs` / `gsdepartments.gs` / `gstasks.gs` | Slice 1 modules |
-| `gsassignments.gs` / `gsmytasks.gs` / `gsprogress.gs` / `gsmonitoring.gs` | Phase 2 modules |
-| `template.html`, `styles.html`, `scripts.html` | Shared shell and UI |
-| Feature `*.html` files | Page fragments for each module |
+1. Click **Deploy -> New deployment -> Web app**.
+2. Execute as: **User accessing the web app**.
+3. Who has access: **Anyone with Google account** (or your organization policy).
+4. Open deployed URL with `?page=login`.
+5. Sign in with:
+   - Username: `admin.ksl`
+   - Password: the value you set in bootstrap
 
----
+### 8) Migrate existing users after auth switch
 
-## Licence and branding
+For users that existed before password auth:
+1. Log in as admin.
+2. Open **Users** page.
+3. Click **Set Password** for each user.
+4. Enter username + temporary password.
+5. Share credentials securely with user.
 
-Application code in this repository is for KSL operational use. The **Kenya Shipyards Limited** name and logo belong to Kenya Shipyards Limited / the Government of Kenya. The logo used in the UI is loaded from the official website.
+### 9) Add staff for assignment
+
+1. Open **Employees** page.
+2. Click **New employee**.
+3. Save staff profile.
+
+Assignments use active Employees (plus active approved Users with Employee ID).
+
+### 10) After any code update
+
+1. Copy updated files into Apps Script.
+2. **Deploy -> Manage deployments -> Edit -> New version -> Deploy**.
+3. Hard refresh browser (`Ctrl + F5`).
+
+## Compliance Audit
+
+Prompt-by-prompt completion status is tracked in:
+- `PROMPT_COMPLIANCE_AUDIT.md`
+
+## After this update
+
+1. Copy all new and changed `.gs` / `.html` files into Apps Script.
+2. Run `bootstrapMvpSlice1Database` to create missing sheets/ranges (`Teams`, `TaskComments`, `TaskAttachments`, `DailyProgress`, `WeeklyProgress`, `MonthlyProgress`, `Performance`) and seed missing settings.
+3. Optionally run `repairWorkbookPerformance`.
+4. Deploy a new web app version and open `/exec?page=login`.
+
+Admin login (if previously bootstrapped): `innovatehubke.admin` / `KslAdmin2026`.
+
+## Main Files
+
+- `gsbootstrap.gs`: schema bootstrap, defaults, admin bootstrap helpers
+- `gscommon.gs`: shared helpers, sessions, credential hashing, audit/history helpers
+- `gsauth.gs`: register/login/logout logic
+- `gsindex.gs`: dashboard KPIs, charts, and export
+- `gsteams.gs`, `gsdailyprogress.gs`, `gsweeklyprogress.gs`, `gsmonthlyprogress.gs`, `gsreports.gs`, `gsperformance.gs`, `gsnotifications.gs`, `gsaudit.gs`, `gssettings.gs`, `gscomments.gs`, `gssnapshots.gs`
+- `gstasks.gs`, `gsassignments.gs`, `gsmytasks.gs`, `gsprogress.gs`, `gsmonitoring.gs`, `gsemployees.gs`, `gsdepartments.gs`, `gsusers.gs`
+- `template.html`, `styles.html`, `scripts.html`: reusable shell and frontend shared logic
+
+## Branding and Ownership
+
+The **Kenya Shipyards Limited** name and logo belong to KSL / Government of Kenya.

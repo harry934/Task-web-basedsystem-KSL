@@ -7,6 +7,8 @@
   <div class="card">
     <div class="toolbar">
       <div class="toolbar-left">
+        <button id="progressNewUpdateButton" class="btn btn-outline" type="button">New progress update</button>
+        <button id="progressPendingButton" class="btn btn-outline" type="button">Pending review</button>
         <button id="progressRefreshButton" class="btn btn-primary" type="button">Refresh</button>
       </div>
       <div class="toolbar-right">
@@ -40,25 +42,66 @@
       </tbody>
     </table>
   </div>
+  <div id="progressPagination" class="pagination"></div>
 </section>
 
 <script>
   (function () {
-    function loadProgress() {
-      KSL.call('listProgressUpdates', KSL.getSessionToken(), {
+    var state = { page: 1, pages: 1, pageSize: 25 };
+
+    function getFilters() {
+      return {
         query: document.getElementById('progressSearchInput').value.trim(),
         review: document.getElementById('progressReviewFilter').value,
-        page: 1,
-        pageSize: 25
-      })
+        page: state.page,
+        pageSize: state.pageSize
+      };
+    }
+
+    function renderPagination() {
+      var pagination = document.getElementById('progressPagination');
+      pagination.innerHTML =
+        '<button type="button" id="progressPrevPage" ' +
+        (state.page <= 1 ? 'disabled' : '') +
+        '>Previous</button>' +
+        '<button type="button" disabled>Page ' +
+        state.page +
+        ' of ' +
+        state.pages +
+        '</button>' +
+        '<button type="button" id="progressNextPage" ' +
+        (state.page >= state.pages ? 'disabled' : '') +
+        '>Next</button>';
+      var prev = document.getElementById('progressPrevPage');
+      var next = document.getElementById('progressNextPage');
+      if (prev) {
+        prev.addEventListener('click', function () {
+          state.page -= 1;
+          loadProgress();
+        });
+      }
+      if (next) {
+        next.addEventListener('click', function () {
+          state.page += 1;
+          loadProgress();
+        });
+      }
+    }
+
+    function loadProgress() {
+      KSL.call('listProgressUpdates', KSL.getSessionToken(), getFilters())
         .then(function (response) {
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Failed to load progress.');
           }
-          var items = (response.data && response.data.items) || [];
+          var payload = response.data || {};
+          var items = payload.items || [];
+          state.page = Number((payload.pagination || {}).page || 1);
+          state.pages = Number((payload.pagination || {}).pages || 1);
           var body = document.getElementById('progressTableBody');
           if (!items.length) {
             body.innerHTML = '<tr><td colspan="8" class="empty-state">No progress updates yet.</td></tr>';
+            renderPagination();
             return;
           }
           body.innerHTML = items
@@ -96,6 +139,7 @@
               );
             })
             .join('');
+          renderPagination();
         })
         .catch(function (error) {
           KSL.showToast(error.message || 'Failed to load progress.', 'error');
@@ -104,9 +148,29 @@
 
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee'], function () {
-        document.getElementById('progressRefreshButton').addEventListener('click', loadProgress);
-        document.getElementById('progressSearchInput').addEventListener('input', KSL.debounce(loadProgress, 400));
-        document.getElementById('progressReviewFilter').addEventListener('change', loadProgress);
+        document.getElementById('progressNewUpdateButton').addEventListener('click', function () {
+          KSL.navigate('mytasks');
+        });
+        document.getElementById('progressPendingButton').addEventListener('click', function () {
+          document.getElementById('progressReviewFilter').value = 'Pending';
+          state.page = 1;
+          loadProgress();
+        });
+        document.getElementById('progressRefreshButton').addEventListener('click', function () {
+          state.page = 1;
+          loadProgress();
+        });
+        document.getElementById('progressSearchInput').addEventListener(
+          'input',
+          KSL.debounce(function () {
+            state.page = 1;
+            loadProgress();
+          }, 400)
+        );
+        document.getElementById('progressReviewFilter').addEventListener('change', function () {
+          state.page = 1;
+          loadProgress();
+        });
         document.getElementById('progressTableBody').addEventListener('click', function (event) {
           var button = event.target.closest('button[data-decision]');
           if (!button) {
@@ -123,6 +187,7 @@
                 throw new Error((response && response.message) || 'Review failed.');
               }
               KSL.showToast('Review saved.', 'success');
+              state.page = 1;
               loadProgress();
             })
             .catch(function (error) {

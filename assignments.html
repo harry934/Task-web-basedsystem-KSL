@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>Task Assignments</h1>
-    <p>Assign tasks to employees and track acceptance.</p>
+    <p>Assign tasks to people from the Employees list (and approved users with an Employee ID). Add staff on the Employees page first if the assignee list is empty.</p>
   </div>
 
   <div class="card">
@@ -11,6 +11,7 @@
           <i class="fa-solid fa-plus"></i>
           New assignment
         </button>
+        <button id="assignmentsPendingButton" class="btn btn-outline" type="button">Pending acceptance</button>
         <button id="assignmentsRefreshButton" class="btn btn-outline" type="button">Refresh</button>
       </div>
       <div class="toolbar-right">
@@ -143,6 +144,37 @@
         .join('');
     }
 
+    function renderPagination() {
+      var pagination = document.getElementById('assignmentsPagination');
+      pagination.innerHTML =
+        '<button type="button" id="assignmentsPrevPage" ' +
+        (state.page <= 1 ? 'disabled' : '') +
+        '>Previous</button>' +
+        '<button type="button" disabled>Page ' +
+        state.page +
+        ' of ' +
+        state.pages +
+        '</button>' +
+        '<button type="button" id="assignmentsNextPage" ' +
+        (state.page >= state.pages ? 'disabled' : '') +
+        '>Next</button>';
+
+      var prev = document.getElementById('assignmentsPrevPage');
+      var next = document.getElementById('assignmentsNextPage');
+      if (prev) {
+        prev.addEventListener('click', function () {
+          state.page -= 1;
+          loadAssignments();
+        });
+      }
+      if (next) {
+        next.addEventListener('click', function () {
+          state.page += 1;
+          loadAssignments();
+        });
+      }
+    }
+
     function loadMeta() {
       return KSL.call('listAssignablePeople', KSL.getSessionToken()).then(function (response) {
         if (!response || !response.success) {
@@ -179,6 +211,7 @@
           state.page = Number((payload.pagination || {}).page || 1);
           state.pages = Number((payload.pagination || {}).pages || 1);
           renderTable();
+          renderPagination();
         })
         .catch(function (error) {
           KSL.showToast(error.message || 'Failed to load assignments.', 'error');
@@ -193,6 +226,11 @@
           document.getElementById('assignmentModalTitle').textContent = 'Assign task';
           document.getElementById('assignmentTaskInput').disabled = false;
           KSL.openModal('assignmentModalBackdrop');
+        });
+        document.getElementById('assignmentsPendingButton').addEventListener('click', function () {
+          document.getElementById('assignmentsStatusFilter').value = 'Pending';
+          state.page = 1;
+          loadAssignments();
         });
         document.getElementById('assignmentsRefreshButton').addEventListener('click', loadAssignments);
         document.getElementById('assignmentsSearchInput').addEventListener(
@@ -233,6 +271,7 @@
               }
               KSL.showToast('Assignment saved.', 'success');
               KSL.closeModal('assignmentModalBackdrop');
+              state.page = 1;
               loadAssignments();
             })
             .catch(function (error) {
