@@ -3,7 +3,8 @@ Thumbs.db
 *.log
 .env
 .clasp.json
-.claspignore
 node_modules/
 spec_extracted.txt
+_docx_extract.txt
 *.docx
+!docs/spec/*.docx

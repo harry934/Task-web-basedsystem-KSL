@@ -1,0 +1,10 @@
+**/*.md
+**/*.png
+**/*.docx
+**/*.txt
+**/.git/**
+**/.gitignore
+**/.clasp.json
+**/.claspignore
+**/node_modules/**
+**/.cursor/**

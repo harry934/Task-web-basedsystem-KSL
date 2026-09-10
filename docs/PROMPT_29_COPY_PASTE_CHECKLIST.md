@@ -32,11 +32,11 @@ Use this as a deployment and acceptance checklist after copying files into Apps 
 - [x] `26` Data Integrity, Concurrency and Error Handling | **Implemented** | Evidence: `gscommon.gs`
 - [x] `27` Final File Structure | **Implemented** | Evidence: required HTML/GS pairs
 - [x] `28` Implementation Checklist | **Implemented** | Evidence: this file
-- [x] `29` Source/Reference Basis | **Implemented** | Evidence: `_docx_extract.txt`, `PROMPT_COMPLIANCE_AUDIT.md`
+- [x] `29` Source/Reference Basis | **Implemented** | Evidence: `docs/spec/Master_Prompt.docx`, `PROMPT_COMPLIANCE_AUDIT.md`
 
 ## Deploy steps
 
-1. Copy every `.gs` and `.html` file into the Apps Script project.
+1. From the repo root run `clasp push --force` (`rootDir` is `src/`).
 2. Run `bootstrapMvpSlice1Database`.
 3. Run `repairWorkbookPerformance` if the workbook is large or slow.
 4. Deploy a new Web App version.

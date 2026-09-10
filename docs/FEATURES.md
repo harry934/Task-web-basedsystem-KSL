@@ -1,18 +1,28 @@
 # Kenya Shipyards Limited Tasks Management System
 
-This is the web app for planning, assigning, tracking, and reviewing work at Kenya Shipyards Limited. It runs on Google Apps Script with Google Sheets as the database. People sign in with a **username and password** issued by an administrator. There is no public sign-up.
+This is the web app for planning, assigning, tracking, and reviewing work at Kenya Shipyards Limited. It runs on Google Apps Script with Google Sheets as the database.
+
+There is **one Sign in page for everyone** — Administrator, Manager, Supervisor, Team Leader, and Staff. After an administrator creates a staff person and issues them a username, that staff member uses the **same** Sign in page as the admin. There is no separate staff login and no public sign-up.
 
 Live app: `https://script.google.com/macros/s/AKfycbzn34cAzmEzRipA4Y2omX8psx4O0OPEWpOoufIkMqK2Mp-bz7I2Tz-yicHosAoRj3f2Pw/exec`
 
 ## How to sign in
 
+The Sign in page is shared. Admin and staff both open the same `/exec` link.
+
+**Administrator**
 1. Open the live `/exec` link.
-2. Enter the username and password created in **Users**.
-3. The dashboard opens for your role.
+2. Sign in with the admin username and password.
+3. The full dashboard opens (all pages for the Administrator role).
+
+**Staff (after the admin has created them)**
+1. Admin creates the person on **Staff**.
+2. Admin creates their login on **Users** (username, password, role Staff, linked Staff UID).
+3. That staff member opens the **same** Sign in page, enters their username and password, and lands on the staff dashboard (Dashboard, My Tasks, Progress, Notifications).
 
 Guessing a page in the URL (for example `?page=progress`) without signing in sends you back to Sign in with: **You are not allowed to open that page. Sign in first.**
 
-Accounts are created from **Staff** (person record) then **Users** (login). Staff cannot create their own accounts.
+Staff cannot create their own accounts. Only an administrator creates Staff records and User logins.
 
 ## Roles at a glance
 
