@@ -63,9 +63,9 @@
         <textarea id="progressRemarksInput" class="textarea"></textarea>
       </div>
       <div class="field full">
-        <label for="progressPdfInput">Summary document (PDF, max 2 MB)</label>
-        <input id="progressPdfInput" class="input" type="file" accept="application/pdf,.pdf">
-        <p class="page-note">One file for the whole update. Completing a subtask with its own PDF is done from My Tasks.</p>
+        <label for="progressPdfInput">Summary document</label>
+        <input id="progressPdfInput" type="file" accept="application/pdf,.pdf">
+        <p class="page-note">One PDF for the whole update. Completing a subtask with its own PDF is done from My Tasks.</p>
       </div>
       <div class="field full">
         <button class="btn btn-primary" type="submit">Submit update</button>
@@ -269,6 +269,7 @@
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'], function () {
         loadLookups();
+        KSL.bindPdfPicker('progressPdfInput');
         document.getElementById('progressTaskIdInput').addEventListener('change', function () {
           KSL.loadTaskSubtaskProgress(
             document.getElementById('progressTaskIdInput').value.trim(),
@@ -313,6 +314,7 @@
               document.getElementById('progressCreateFormElement').reset();
               document.getElementById('progressHoursInput').value = 0;
               document.getElementById('progressValueInput').value = 0;
+              KSL.resetPdfPicker('progressPdfInput');
               KSL.applySubtaskProgressPanel('progressSubtasksBox', 'progressValueInput', [], 0);
               loadLookups();
               state.page = 1;

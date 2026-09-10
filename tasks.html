@@ -185,9 +185,11 @@
         <div class="toolbar" style="margin-top: 8px;">
           <div class="toolbar-left">
             <button id="taskCommentButton" class="btn btn-outline" type="button">Save comment</button>
-            <label class="btn btn-outline" for="taskAttachmentInput">Upload attachment</label>
-            <input id="taskAttachmentInput" class="hidden" type="file">
           </div>
+        </div>
+        <div class="field full" style="margin-top: 10px;">
+          <label for="taskAttachmentInput">Attachment</label>
+          <input id="taskAttachmentInput" type="file" accept="application/pdf,.pdf">
         </div>
         <ul id="taskAttachmentsList" class="collab-list"></ul>
       </div>
@@ -794,34 +796,37 @@
       document.getElementById('taskAttachmentInput').addEventListener('change', function (event) {
         var file = event.target.files && event.target.files[0];
         var taskId = document.getElementById('taskIdInput').value.trim();
-        if (!file || !taskId) {
-          KSL.showToast('Save the task first, then upload an attachment.', 'error');
-          event.target.value = '';
+        if (!file) {
           return;
         }
-        var reader = new FileReader();
-        reader.onload = function () {
-          var result = String(reader.result || '');
-          var base64 = result.indexOf(',') > -1 ? result.split(',')[1] : result;
-          KSL.callBusy('uploadTaskAttachment', KSL.getSessionToken(), {
-            taskId: taskId,
-            fileName: file.name,
-            mimeType: file.type,
-            base64: base64
-          })
-            .then(function (response) {
-              if (!response || !response.success) {
-                throw new Error((response && response.message) || 'Upload failed.');
-              }
-              event.target.value = '';
-              loadCollaboration(taskId);
-              KSL.showToast('Attachment uploaded.', 'success');
-            })
-            .catch(function (error) {
-              KSL.showToast(error.message || 'Upload failed.', 'error');
+        if (!taskId) {
+          KSL.showToast('Save the task first, then upload an attachment.', 'error');
+          KSL.resetPdfPicker('taskAttachmentInput');
+          return;
+        }
+        if (!KSL.isPdfFile(file)) {
+          return;
+        }
+        KSL.readPdfEvidence(file)
+          .then(function (pdf) {
+            return KSL.callBusy('uploadTaskAttachment', KSL.getSessionToken(), {
+              taskId: taskId,
+              fileName: pdf.fileName,
+              mimeType: pdf.mimeType,
+              base64: pdf.base64
             });
-        };
-        reader.readAsDataURL(file);
+          })
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Upload failed.');
+            }
+            KSL.resetPdfPicker('taskAttachmentInput');
+            loadCollaboration(taskId);
+            KSL.showToast('Attachment uploaded.', 'success');
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Upload failed.', 'error');
+          });
       });
       document.getElementById('tasksTableBody').addEventListener('click', function (event) {
         var button = event.target.closest('button[data-action]');
@@ -886,6 +891,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader'], function () {
+        KSL.bindPdfPicker('taskAttachmentInput');
         bindEvents();
         loadTaskMetadata()
           .then(function () {

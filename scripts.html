@@ -349,6 +349,169 @@
       });
     };
 
+    KSL.isPdfFile = function (file) {
+      if (!file) {
+        return false;
+      }
+      var name = String(file.name || '');
+      var type = String(file.type || '').toLowerCase();
+      return type === 'application/pdf' || /\.pdf$/i.test(name);
+    };
+
+    KSL.bindPdfPicker = function (inputId, options) {
+      var input = document.getElementById(inputId);
+      if (!input || input.dataset.pdfBound === '1') {
+        return;
+      }
+      var opts = options || {};
+      var maxMb = Math.max(1, Number((KSL.state.settings && KSL.state.settings.MAX_SUBTASK_PDF_MB) || 2));
+      input.dataset.pdfBound = '1';
+      input.classList.add('hidden');
+      input.setAttribute('accept', 'application/pdf,.pdf');
+
+      var zone = document.createElement('div');
+      zone.className = 'pdf-dropzone';
+      zone.innerHTML =
+        '<div class="pdf-dropzone-inner">' +
+        '<i class="fa-solid fa-file-pdf pdf-dropzone-icon" aria-hidden="true"></i>' +
+        '<strong class="pdf-dropzone-title">Choose a PDF</strong>' +
+        '<span class="pdf-dropzone-name">No file selected</span>' +
+        '<span class="pdf-dropzone-hint">PDF only, max ' +
+        maxMb +
+        ' MB. Click or drop a file here.</span>' +
+        '<span class="pdf-dropzone-error hidden"></span>' +
+        '</div>';
+      input.parentNode.insertBefore(zone, input);
+      zone.appendChild(input);
+
+      var nameEl = zone.querySelector('.pdf-dropzone-name');
+      var titleEl = zone.querySelector('.pdf-dropzone-title');
+      var errorEl = zone.querySelector('.pdf-dropzone-error');
+
+      function showPickerError(message) {
+        if (errorEl) {
+          errorEl.textContent = message;
+          errorEl.classList.remove('hidden');
+        }
+        zone.classList.add('is-error');
+        zone.classList.remove('has-file');
+        KSL.showToast(message, 'error');
+      }
+
+      function clearPickerError() {
+        if (errorEl) {
+          errorEl.textContent = '';
+          errorEl.classList.add('hidden');
+        }
+        zone.classList.remove('is-error');
+      }
+
+      function setSelectedFile(file) {
+        try {
+          var transfer = new DataTransfer();
+          transfer.items.add(file);
+          input.files = transfer.files;
+        } catch (error) {
+          return false;
+        }
+        return true;
+      }
+
+      function applyFile(file) {
+        if (!file) {
+          nameEl.textContent = 'No file selected';
+          titleEl.textContent = 'Choose a PDF';
+          zone.classList.remove('has-file');
+          return false;
+        }
+        if (!KSL.isPdfFile(file)) {
+          input.value = '';
+          nameEl.textContent = 'No file selected';
+          titleEl.textContent = 'Choose a PDF';
+          showPickerError('Only PDF files are allowed.');
+          return false;
+        }
+        if (file.size < 1024) {
+          input.value = '';
+          nameEl.textContent = 'No file selected';
+          titleEl.textContent = 'Choose a PDF';
+          showPickerError('The PDF is too small or empty.');
+          return false;
+        }
+        if (file.size > maxMb * 1024 * 1024) {
+          input.value = '';
+          nameEl.textContent = 'No file selected';
+          titleEl.textContent = 'Choose a PDF';
+          showPickerError('The PDF must be ' + maxMb + ' MB or smaller.');
+          return false;
+        }
+        clearPickerError();
+        zone.classList.add('has-file');
+        nameEl.textContent = file.name;
+        titleEl.textContent = 'PDF selected';
+        return true;
+      }
+
+      zone.addEventListener('click', function (event) {
+        if (event.target === input) {
+          return;
+        }
+        event.preventDefault();
+        input.click();
+      });
+      zone.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        zone.classList.add('is-drag');
+      });
+      zone.addEventListener('dragleave', function () {
+        zone.classList.remove('is-drag');
+      });
+      zone.addEventListener('drop', function (event) {
+        event.preventDefault();
+        zone.classList.remove('is-drag');
+        var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+        if (!file) {
+          return;
+        }
+        if (!applyFile(file)) {
+          return;
+        }
+        setSelectedFile(file);
+      });
+      input.addEventListener('change', function () {
+        applyFile(input.files && input.files[0]);
+      });
+      if (opts.required) {
+        input.setAttribute('required', 'required');
+      }
+    };
+
+    KSL.resetPdfPicker = function (inputId) {
+      var input = document.getElementById(inputId);
+      if (!input) {
+        return;
+      }
+      input.value = '';
+      var zone = input.closest('.pdf-dropzone');
+      if (!zone) {
+        return;
+      }
+      zone.classList.remove('has-file', 'is-error', 'is-drag');
+      var nameEl = zone.querySelector('.pdf-dropzone-name');
+      var titleEl = zone.querySelector('.pdf-dropzone-title');
+      var errorEl = zone.querySelector('.pdf-dropzone-error');
+      if (nameEl) {
+        nameEl.textContent = 'No file selected';
+      }
+      if (titleEl) {
+        titleEl.textContent = 'Choose a PDF';
+      }
+      if (errorEl) {
+        errorEl.textContent = '';
+        errorEl.classList.add('hidden');
+      }
+    };
+
     KSL.readPdfEvidence = function (file) {
       return new Promise(function (resolve, reject) {
         if (!file) {
@@ -755,6 +918,10 @@
       KSL.navigate('login', 'relogin=1');
     };
 
+    KSL.redirectDeniedToLogin = function () {
+      KSL.navigate('login', 'denied=1');
+    };
+
     KSL.isInvalidSessionError = function (message) {
       return /session expired|invalid|sign in again|not active|no longer exists|pending administrator|no active session/i.test(
         String(message || '')
@@ -817,14 +984,7 @@
         KSL.setSessionToken(token);
       }
       if (!token) {
-        KSL.showAccessGate(
-          'Sign in required',
-          'You must sign in before opening this page. Guessing a URL does not grant access.',
-          'Sign in',
-          function () {
-            KSL.redirectToLogin();
-          }
-        );
+        KSL.redirectDeniedToLogin();
         return Promise.reject(new Error('No active session.'));
       }
 

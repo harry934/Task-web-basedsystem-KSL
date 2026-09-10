@@ -6,7 +6,6 @@
   >
   <p class="login-kicker">Ministry of Defence</p>
   <h1>Kenya Shipyards Limited</h1>
-  <p>Sign in with the username issued by an administrator. Staff accounts are created from User Management.</p>
 
   <div id="loginAlert" class="card hidden" style="margin-bottom: 14px; border-left: 4px solid #0ea5e9;">
     <span id="loginAlertText"></span>
@@ -28,10 +27,6 @@
       </div>
     </form>
   </div>
-
-  <div class="auth-extra-actions">
-    <button id="clearSessionButton" class="btn btn-outline auth-utility-button" type="button">Use different account</button>
-  </div>
 </section>
 
 <script>
@@ -45,6 +40,11 @@
       alertText.textContent = message || '';
       alertBox.classList.remove('hidden');
       alertBox.style.borderLeftColor = isError ? '#dc2626' : '#0ea5e9';
+    }
+
+    function isFlagParam_(value) {
+      var normalized = String(value || '').toLowerCase();
+      return normalized === '1' || normalized === 'true' || normalized === 'yes';
     }
 
     function clearExistingSession(showMessage) {
@@ -112,8 +112,7 @@
       if (!KSL.getScriptUrl()) {
         return;
       }
-      var reloginParam = String(KSL.readQueryParam('relogin') || '').toLowerCase();
-      if (reloginParam === '1' || reloginParam === 'true' || reloginParam === 'yes') {
+      if (isFlagParam_(KSL.readQueryParam('relogin'))) {
         clearExistingSession(false);
         return;
       }
@@ -140,16 +139,13 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+      if (isFlagParam_(KSL.readQueryParam('denied'))) {
+        showLoginMessage('You are not allowed to open that page. Sign in first.', true);
+      }
       tryAutoRedirectForExistingSession();
       var loginForm = document.getElementById('passwordLoginForm');
-      var clearSessionButton = document.getElementById('clearSessionButton');
       if (loginForm) {
         loginForm.addEventListener('submit', handleLogin);
-      }
-      if (clearSessionButton) {
-        clearSessionButton.addEventListener('click', function () {
-          clearExistingSession(true);
-        });
       }
     });
   })();

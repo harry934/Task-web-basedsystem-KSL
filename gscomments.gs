@@ -100,15 +100,26 @@ function uploadTaskAttachment(sessionToken, payload) {
     if (!taskId || !fileName || !input.base64) {
       throw new Error('taskId, fileName and file data are required.');
     }
+    var mimeType = normalizeString_(input.mimeType || '').toLowerCase();
+    if (mimeType !== 'application/pdf' && !/\.pdf$/i.test(fileName)) {
+      throw new Error('Only PDF files are allowed.');
+    }
     assertTaskVisible_(authContext.user, taskId);
-    var maxMb = Math.max(1, normalizeNumber_(getSettingValue_('MAX_ATTACHMENT_MB', 8), 8));
+    var maxMb = Math.max(1, normalizeNumber_(getSettingValue_('MAX_SUBTASK_PDF_MB', 2), 2));
+    var attachmentCap = normalizeNumber_(getSettingValue_('MAX_ATTACHMENT_MB', maxMb), maxMb);
+    if (attachmentCap > 0) {
+      maxMb = Math.min(maxMb, attachmentCap);
+    }
     var bytes = Utilities.base64Decode(String(input.base64));
+    if (!bytes || bytes.length < 1024) {
+      throw new Error('The PDF is too small or empty.');
+    }
     if (bytes.length > maxMb * 1024 * 1024) {
-      throw new Error('Attachment exceeds the configured size limit.');
+      throw new Error('The PDF must be ' + maxMb + ' MB or smaller.');
     }
     return withScriptLock_(function () {
       var folder = getAttachmentsFolder_();
-      var blob = Utilities.newBlob(bytes, normalizeString_(input.mimeType || 'application/octet-stream'), fileName);
+      var blob = Utilities.newBlob(bytes, 'application/pdf', fileName);
       var file = folder.createFile(blob);
       var schema = resolveSchema_('TASK_ATTACHMENTS');
       var sheet = getSheetBySchema_(schema);

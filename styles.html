@@ -1123,6 +1123,67 @@
     margin-left: auto;
   }
 
+  .pdf-dropzone {
+    position: relative;
+    border: 1px solid var(--navy);
+    border-top: 3px solid var(--gold);
+    background: var(--white);
+    padding: 16px 14px;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .pdf-dropzone:hover,
+  .pdf-dropzone.is-drag {
+    border-color: var(--gold);
+  }
+
+  .pdf-dropzone.has-file {
+    background: #f7f9fb;
+  }
+
+  .pdf-dropzone.is-error {
+    border-color: var(--danger);
+    border-top-color: var(--danger);
+  }
+
+  .pdf-dropzone-icon {
+    display: block;
+    font-size: 22px;
+    color: var(--navy);
+    margin-bottom: 8px;
+  }
+
+  .pdf-dropzone.has-file .pdf-dropzone-icon {
+    color: var(--gold);
+  }
+
+  .pdf-dropzone-title {
+    display: block;
+    color: var(--navy);
+    font-size: 13px;
+  }
+
+  .pdf-dropzone-name,
+  .pdf-dropzone-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .pdf-dropzone-hint {
+    font-size: 11px;
+  }
+
+  .pdf-dropzone-error {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--danger);
+  }
+
   .subtask-progress-list {
     margin: 0;
     padding: 0;

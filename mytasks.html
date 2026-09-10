@@ -101,9 +101,9 @@
           <textarea id="myRemarksInput" class="textarea"></textarea>
         </div>
         <div class="field full">
-          <label for="myProgressPdfInput">Summary document (PDF, max 2 MB)</label>
-          <input id="myProgressPdfInput" class="input" type="file" accept="application/pdf,.pdf">
-          <p class="page-note">One file for the whole update. Completing a subtask still uses its own summary and PDF.</p>
+          <label for="myProgressPdfInput">Summary document</label>
+          <input id="myProgressPdfInput" type="file" accept="application/pdf,.pdf">
+          <p class="page-note">One PDF for the whole update. Completing a subtask still uses its own summary and PDF.</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -132,8 +132,8 @@
           <textarea id="completeSubtaskSummary" class="textarea" required placeholder="What was completed?"></textarea>
         </div>
         <div class="field full">
-          <label for="completeSubtaskPdf">Evidence PDF (required, max 2 MB)</label>
-          <input id="completeSubtaskPdf" class="input" type="file" accept="application/pdf,.pdf" required>
+          <label for="completeSubtaskPdf">Evidence PDF</label>
+          <input id="completeSubtaskPdf" type="file" accept="application/pdf,.pdf">
         </div>
       </div>
       <div class="modal-footer">
@@ -286,6 +286,7 @@
       document.getElementById('completeSubtaskForm').reset();
       document.getElementById('completeSubtaskId').value = subtaskId || '';
       document.getElementById('completeSubtaskTitle').value = title || subtaskId || '';
+      KSL.resetPdfPicker('completeSubtaskPdf');
       KSL.openModal('completeSubtaskBackdrop');
     }
 
@@ -315,6 +316,7 @@
       document.getElementById('myProgressForm').reset();
       populateAssignmentSelect(assignmentId);
       document.getElementById('myHoursInput').value = 0;
+      KSL.resetPdfPicker('myProgressPdfInput');
       loadSelectedAssignmentSubtasks();
       KSL.openModal('progressModalBackdrop');
     }
@@ -346,6 +348,8 @@
 
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'], function () {
+        KSL.bindPdfPicker('myProgressPdfInput');
+        KSL.bindPdfPicker('completeSubtaskPdf', { required: true });
         document.getElementById('myTasksNewUpdateButton').addEventListener('click', function () {
           openProgressModal('');
         });
