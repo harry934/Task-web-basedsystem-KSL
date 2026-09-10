@@ -229,6 +229,33 @@ function createTask(sessionToken, payload) {
       mapTaskForResponse_(record)
     );
 
+    var notified = {};
+    var taskTitle = normalizeString_(input.taskTitle);
+    if (input.primaryAssignee) {
+      notified[normalizeString_(input.primaryAssignee)] = true;
+      notifyAssignedStaff_(
+        input.primaryAssignee,
+        'New task assignment',
+        'You were assigned to ' + taskTitle + ' (' + taskId + ').',
+        taskId,
+        'High'
+      );
+    }
+    (input.subtasks || []).forEach(function (item) {
+      var staffId = normalizeString_(item && (item.assignedStaffId || item.employeeId));
+      if (!staffId || notified[staffId]) {
+        return;
+      }
+      notified[staffId] = true;
+      notifyAssignedStaff_(
+        staffId,
+        'New task assignment',
+        'You were assigned a subtask on ' + taskTitle + ' (' + taskId + ').',
+        taskId,
+        'High'
+      );
+    });
+
     return successResponse_('Task created successfully.', {
       taskId: taskId
     });

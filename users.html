@@ -675,12 +675,36 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.requireAuth(['Administrator'], function (context) {
-        var dimensions = context.dimensions || {};
-        renderDropdownOptions('usersRoleFilter', staffRoleValues(dimensions.Roles || []), 'All roles');
-        renderDropdownOptions('usersStatusFilter', dimensions['Account Statuses'] || [], 'All statuses');
-        renderDropdownOptions('approvalRole', staffRoleValues(dimensions.Roles || ['Staff']), '');
-        renderDropdownOptions('newUserRole', staffRoleValues(dimensions.Roles || ['Staff']), '');
+      KSL.requireAuth(['Administrator'], function () {
+        var defaultRoles = ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff'];
+        var defaultStatuses = ['Active', 'Inactive', 'Pending'];
+        function applyUserDimensions(dimensions) {
+          var values = dimensions || {};
+          renderDropdownOptions('usersRoleFilter', staffRoleValues(values.Roles || defaultRoles), 'All roles');
+          renderDropdownOptions(
+            'usersStatusFilter',
+            values['Account Statuses'] || defaultStatuses,
+            'All statuses'
+          );
+          renderDropdownOptions('approvalRole', staffRoleValues(values.Roles || defaultRoles), '');
+          renderDropdownOptions('newUserRole', staffRoleValues(values.Roles || defaultRoles), '');
+        }
+        applyUserDimensions({});
+        KSL.call('listDimensionsAdmin', KSL.getSessionToken())
+          .then(function (response) {
+            var grouped = {};
+            (((response && response.data) || {}).items || []).forEach(function (item) {
+              if (!item || item.status === 'Inactive') {
+                return;
+              }
+              grouped[item.column] = grouped[item.column] || [];
+              grouped[item.column].push(item.value);
+            });
+            applyUserDimensions(grouped);
+          })
+          .catch(function () {
+            return null;
+          });
         loadStaffSelects('', '');
         bindTableActions();
         bindFilters();

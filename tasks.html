@@ -135,34 +135,34 @@
           <label for="taskDueDateInput">Due Date</label>
           <input id="taskDueDateInput" class="input" type="date" required>
         </div>
-        <div class="field">
+        <div class="field hidden">
           <label for="taskEstimatedHoursInput">Estimated Hours</label>
           <input id="taskEstimatedHoursInput" class="input" type="number" min="0" step="0.25" value="0">
         </div>
-        <div class="field">
+        <div class="field hidden">
           <label for="taskActualHoursInput">Actual Hours</label>
           <input id="taskActualHoursInput" class="input" type="number" min="0" step="0.25" value="0">
         </div>
         <div class="field full">
-          <label for="taskPrimaryAssigneeInput">Primary assignee</label>
+          <label for="taskPrimaryAssigneeInput">Primary assignee (optional)</label>
           <select id="taskPrimaryAssigneeInput" class="select"></select>
         </div>
-        <div class="field">
+        <div class="field hidden">
           <label for="taskDelayReasonInput">Delay reason</label>
           <select id="taskDelayReasonInput" class="select"></select>
         </div>
-        <div class="field">
+        <div class="field hidden">
           <label for="taskBlockerInput">Blocker</label>
           <select id="taskBlockerInput" class="select">
             <option value="">No</option>
             <option value="Yes">Yes</option>
           </select>
         </div>
-        <div class="field full">
+        <div class="field full hidden">
           <label for="taskBlockerDescriptionInput">Blocker Description</label>
           <textarea id="taskBlockerDescriptionInput" class="textarea"></textarea>
         </div>
-        <div class="field full">
+        <div class="field full hidden">
           <label for="taskCompletionNotesInput">Completion Notes</label>
           <textarea id="taskCompletionNotesInput" class="textarea"></textarea>
         </div>

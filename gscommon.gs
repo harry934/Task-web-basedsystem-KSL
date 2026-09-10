@@ -1053,12 +1053,13 @@ function getDimensionValues_(columnName) {
   return valuesMap[columnName] || [];
 }
 
-function getUnreadNotificationsCount_(userId) {
+function getUnreadNotificationsCount_(userId, employeeId) {
   var normalizedUserId = normalizeString_(userId);
-  if (!normalizedUserId) {
+  var normalizedEmployeeId = normalizeString_(employeeId);
+  if (!normalizedUserId && !normalizedEmployeeId) {
     return 0;
   }
-  var cacheKey = 'UNREAD_NTF_' + normalizedUserId;
+  var cacheKey = 'UNREAD_NTF_' + (normalizedUserId || normalizedEmployeeId);
   var cached = CacheService.getScriptCache().get(cacheKey);
   if (cached !== null && cached !== undefined && cached !== '') {
     return normalizeNumber_(cached, 0);
@@ -1070,10 +1071,13 @@ function getUnreadNotificationsCount_(userId) {
   try {
     var records = readSheetRecords_(notificationSchema);
     var count = records.filter(function (record) {
-      return (
-        normalizeString_(record['User ID']) === normalizedUserId &&
-        normalizeString_(record['Read Status']).toLowerCase() !== 'read'
-      );
+      var matchesUser = normalizedUserId && normalizeString_(record['User ID']) === normalizedUserId;
+      var matchesEmployee =
+        normalizedEmployeeId && normalizeString_(record['Employee ID']) === normalizedEmployeeId;
+      if (!matchesUser && !matchesEmployee) {
+        return false;
+      }
+      return normalizeString_(record['Read Status']).toLowerCase() !== 'read';
     }).length;
     CacheService.getScriptCache().put(cacheKey, String(count), 90);
     return count;
@@ -1181,6 +1185,47 @@ function writeTaskHistory_(actor, taskId, actionType, changedField, oldValue, ne
   appendSheetRecord_(sheet, schema.columns, record);
 }
 
+function clearUnreadNotificationCache_(userId, employeeId) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var keys = [];
+    var uid = normalizeString_(userId);
+    var eid = normalizeString_(employeeId);
+    if (uid) {
+      keys.push('UNREAD_NTF_' + uid);
+    }
+    if (eid) {
+      keys.push('UNREAD_NTF_' + eid);
+      var personUser = findUserByEmployeeId_(eid);
+      if (personUser && personUser['User ID']) {
+        keys.push('UNREAD_NTF_' + normalizeString_(personUser['User ID']));
+      }
+    }
+    if (keys.length) {
+      cache.removeAll(keys);
+    }
+  } catch (error) {
+    // Best-effort only.
+  }
+}
+
+function notifyAssignedStaff_(staffId, title, message, taskId, priority) {
+  var id = normalizeString_(staffId);
+  if (!id) {
+    return;
+  }
+  var personUser = findUserByEmployeeId_(id);
+  createNotification_(
+    personUser ? personUser['User ID'] : '',
+    id,
+    'Assignment',
+    title,
+    message,
+    taskId,
+    priority || 'High'
+  );
+}
+
 function createNotification_(userId, employeeId, type, title, message, relatedTaskId, priority) {
   if (!normalizeString_(userId) && !normalizeString_(employeeId)) {
     return;
@@ -1202,6 +1247,7 @@ function createNotification_(userId, employeeId, type, title, message, relatedTa
     'Expiry Date': ''
   };
   appendSheetRecord_(sheet, schema.columns, record);
+  clearUnreadNotificationCache_(userId, employeeId);
 }
 
 function findEmployeeByEmail_(email) {

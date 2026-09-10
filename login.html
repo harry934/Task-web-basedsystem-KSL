@@ -78,7 +78,6 @@
         password: document.getElementById('loginPasswordInput').value
       };
       setFormBusy(loginForm, loginButton, true, 'Signing in...', 'Sign in');
-      KSL.showProcessing('Signing in...');
       KSL.call('loginWithPassword', loginPayload)
         .then(function (result) {
           if (!result || !result.success) {
@@ -87,7 +86,6 @@
 
           var responsePayload = result.data || {};
           if (responsePayload.requiresApproval) {
-            KSL.hideProcessing();
             setFormBusy(loginForm, loginButton, false, 'Signing in...', 'Sign in');
             showLoginMessage(result.message || 'This account is not active. Contact an administrator.', false);
             return;
@@ -101,11 +99,9 @@
           if (responsePayload.user && responsePayload.user.role) {
             KSL.setCachedRole(responsePayload.user.role);
           }
-          KSL.showProcessing('Opening dashboard...');
           KSL.navigate('dashboard');
         })
         .catch(function (error) {
-          KSL.hideProcessing();
           setFormBusy(loginForm, loginButton, false, 'Signing in...', 'Sign in');
           KSL.showToast(error.message || 'Login failed.', 'error');
           showLoginMessage(error.message || 'Login failed.', true);
@@ -131,7 +127,6 @@
             if (result.data && result.data.user && result.data.user.role) {
               KSL.setCachedRole(result.data.user.role);
             }
-            KSL.showProcessing('Opening dashboard...');
             KSL.navigate('dashboard');
           } else if (result && KSL.isInvalidSessionError(result.message)) {
             KSL.clearSessionToken();

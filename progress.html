@@ -17,7 +17,8 @@
       </div>
       <div class="field">
         <label for="progressValueInput">Progress %</label>
-        <input id="progressValueInput" class="input" type="number" min="0" max="100" required>
+        <input id="progressValueInput" class="input" type="number" min="0" max="100" value="0" readonly>
+        <p class="page-note">Equal weight from completed subtasks. Not editable.</p>
       </div>
       <div class="field">
         <label for="progressStatusInput">Status</label>
@@ -30,6 +31,12 @@
       <div class="field">
         <label for="progressHoursInput">Hours worked</label>
         <input id="progressHoursInput" class="input" type="number" min="0" step="0.25" value="0">
+      </div>
+      <div class="field full">
+        <label>Subtasks</label>
+        <div id="progressSubtasksBox">
+          <p class="page-note">Select a task to see its subtasks.</p>
+        </div>
       </div>
       <div class="field full">
         <label for="progressWorkCompletedInput">Work completed</label>
@@ -54,6 +61,11 @@
       <div class="field full">
         <label for="progressRemarksInput">Remarks</label>
         <textarea id="progressRemarksInput" class="textarea"></textarea>
+      </div>
+      <div class="field full">
+        <label for="progressPdfInput">Summary document (PDF, max 2 MB)</label>
+        <input id="progressPdfInput" class="input" type="file" accept="application/pdf,.pdf">
+        <p class="page-note">One file for the whole update. Completing a subtask with its own PDF is done from My Tasks.</p>
       </div>
       <div class="field full">
         <button class="btn btn-primary" type="submit">Submit update</button>
@@ -237,6 +249,11 @@
                 '</span></td><td>' +
                 KSL.escapeHtml(KSL.formatDate(item.updateDate) || '-') +
                 '</td><td><div class="toolbar-left">' +
+                (item.fileUrl
+                  ? '<a class="btn btn-outline" href="' +
+                    KSL.escapeHtml(item.fileUrl) +
+                    '" target="_blank" rel="noopener">PDF</a>'
+                  : '') +
                 actions +
                 '</div></td></tr>'
               );
@@ -252,24 +269,42 @@
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'], function () {
         loadLookups();
+        document.getElementById('progressTaskIdInput').addEventListener('change', function () {
+          KSL.loadTaskSubtaskProgress(
+            document.getElementById('progressTaskIdInput').value.trim(),
+            'progressSubtasksBox',
+            'progressValueInput'
+          ).catch(function (error) {
+            KSL.showToast(error.message || 'Failed to load subtasks.', 'error');
+          });
+        });
         document.getElementById('progressNewUpdateButton').addEventListener('click', function () {
           document.getElementById('progressTaskIdInput').focus();
         });
         document.getElementById('progressCreateFormElement').addEventListener('submit', function (event) {
           event.preventDefault();
-          KSL.call('createProgressUpdate', KSL.getSessionToken(), {
-            taskId: document.getElementById('progressTaskIdInput').value.trim(),
-            employeeId: document.getElementById('progressEmployeeIdInput').value.trim(),
-            progress: Number(document.getElementById('progressValueInput').value || 0),
-            status: document.getElementById('progressStatusInput').value,
-            hoursWorked: Number(document.getElementById('progressHoursInput').value || 0),
-            workCompleted: document.getElementById('progressWorkCompletedInput').value,
-            workRemaining: document.getElementById('progressWorkRemainingInput').value,
-            challenges: document.getElementById('progressChallengesInput').value,
-            nextAction: document.getElementById('progressNextActionInput').value,
-            blockers: document.getElementById('progressBlockersInput').value,
-            remarks: document.getElementById('progressRemarksInput').value
-          })
+          var pdfInput = document.getElementById('progressPdfInput');
+          KSL.readOptionalPdfEvidence(pdfInput)
+            .then(function (pdf) {
+              var payload = {
+                taskId: document.getElementById('progressTaskIdInput').value.trim(),
+                employeeId: document.getElementById('progressEmployeeIdInput').value.trim(),
+                status: document.getElementById('progressStatusInput').value,
+                hoursWorked: Number(document.getElementById('progressHoursInput').value || 0),
+                workCompleted: document.getElementById('progressWorkCompletedInput').value,
+                workRemaining: document.getElementById('progressWorkRemainingInput').value,
+                challenges: document.getElementById('progressChallengesInput').value,
+                nextAction: document.getElementById('progressNextActionInput').value,
+                blockers: document.getElementById('progressBlockersInput').value,
+                remarks: document.getElementById('progressRemarksInput').value
+              };
+              if (pdf) {
+                payload.fileName = pdf.fileName;
+                payload.mimeType = pdf.mimeType;
+                payload.base64 = pdf.base64;
+              }
+              return KSL.callBusy('createProgressUpdate', KSL.getSessionToken(), payload);
+            })
             .then(function (response) {
               if (!response || !response.success) {
                 throw new Error((response && response.message) || 'Submit failed.');
@@ -277,6 +312,8 @@
               KSL.showToast('Progress update saved.', 'success');
               document.getElementById('progressCreateFormElement').reset();
               document.getElementById('progressHoursInput').value = 0;
+              document.getElementById('progressValueInput').value = 0;
+              KSL.applySubtaskProgressPanel('progressSubtasksBox', 'progressValueInput', [], 0);
               loadLookups();
               state.page = 1;
               loadProgress();

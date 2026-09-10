@@ -166,12 +166,8 @@ function submitMyProgress(sessionToken, payload) {
     );
     var input = payload || {};
     var assignmentId = normalizeString_(input.assignmentId);
-    var progress = normalizeNumber_(input.progress, 0);
     if (!assignmentId) {
       throw new Error('assignmentId is required.');
-    }
-    if (progress < 0 || progress > 100) {
-      throw new Error('Progress must be between 0 and 100.');
     }
 
     var assignmentSchema = resolveSchema_('TASK_ASSIGNMENTS');
@@ -195,13 +191,16 @@ function submitMyProgress(sessionToken, payload) {
 
     var previousProgress = normalizeNumber_(assignment['Employee Progress %'], 0);
     var now = new Date();
+    var storedFile = storeProgressPdfFromInput_(input);
+    var subtasks = getSubtasksForTask_(assignment['Task ID']);
+    var progress = computeSubtaskProgressPercent_(subtasks);
     var status = normalizeString_(input.status || assignment['Employee Status'] || 'In Progress');
     var allowBelow100 = Boolean(getSettingValue_('ALLOW_COMPLETION_BELOW_100', false));
     if (status.toLowerCase() === 'completed' && progress < 100 && !allowBelow100) {
-      throw new Error('Completion requires 100% progress.');
+      throw new Error('Completion requires 100% progress. Complete remaining subtasks first.');
     }
 
-    var updateSchema = resolveSchema_('TASK_UPDATES');
+    var updateSchema = ensureTaskUpdatesSchema_();
     var updateSheet = getSheetBySchema_(updateSchema);
     var updateRecord = {
       'Update ID': generateSequenceId_('UPD'),
@@ -222,7 +221,12 @@ function submitMyProgress(sessionToken, payload) {
       'Supervisor Review': 'Pending',
       'Supervisor Comment': '',
       'Supervisor Review Date': '',
-      'Created Timestamp': now
+      'Created Timestamp': now,
+      'File Name': storedFile.fileName,
+      'File URL': storedFile.fileUrl,
+      'File ID': storedFile.fileId,
+      'MIME Type': storedFile.mimeType,
+      'File Size': storedFile.fileSize
     };
     appendSheetRecord_(updateSheet, updateSchema.columns, updateRecord);
 
@@ -247,26 +251,18 @@ function submitMyProgress(sessionToken, payload) {
 
     var task = findTaskRecord_(assignment['Task ID']);
     if (task) {
-      var existingSubs = getSubtasksForTask_(assignment['Task ID']);
-      if (!existingSubs.length) {
+      if (subtasks.length) {
+        recalculateTaskProgressFromSubtasks_(assignment['Task ID'], authContext.user);
+      } else {
         var taskSchema = resolveSchema_('TASKS');
         var taskSheet = getSheetBySchema_(taskSchema);
         var updatedTask = Object.assign({}, task);
         updatedTask['Progress %'] = progress;
-        updatedTask.Status = status.toLowerCase() === 'completed' ? 'Completed' : 'In Progress';
-        updatedTask.Blocker = normalizeString_(input.blockers) ? 'Yes' : updatedTask.Blocker;
-        updatedTask['Blocker Description'] = normalizeString_(input.blockers) || updatedTask['Blocker Description'];
-        updatedTask['Actual Hours'] =
-          normalizeNumber_(updatedTask['Actual Hours'], 0) + normalizeNumber_(input.hoursWorked, 0);
+        updatedTask.Status = status.toLowerCase() === 'completed' ? 'Completed' : updatedTask.Status;
         updatedTask['Updated Timestamp'] = now;
         updatedTask['Updated By'] = authContext.user.userId;
-        if (updatedTask.Status === 'Completed') {
-          updatedTask['Completed Date'] = now;
-        }
         applyTaskDerivedFields_(updatedTask);
         updateSheetRecordByRow_(taskSheet, task.__rowNumber, taskSchema.columns, updatedTask);
-      } else {
-        recalculateTaskProgressFromSubtasks_(assignment['Task ID'], authContext.user);
       }
     }
 

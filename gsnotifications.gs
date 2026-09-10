@@ -82,6 +82,17 @@ function markAllNotificationsRead(sessionToken) {
   }
 }
 
+function getUnreadNotificationCount(sessionToken) {
+  try {
+    var authContext = requireSession_(sessionToken, [], '', { skipActivity: true });
+    return successResponse_('Unread count loaded.', {
+      count: getUnreadNotificationsCount_(authContext.user.userId, authContext.user.employeeId)
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Unable to load notification count.');
+  }
+}
+
 function updateNotificationReadState_(user, notificationIds) {
   var schema = resolveSchema_('NOTIFICATIONS');
   var sheet = getSheetBySchema_(schema);
@@ -106,7 +117,9 @@ function updateNotificationReadState_(user, notificationIds) {
     updatedCount += 1;
   });
   try {
-    CacheService.getScriptCache().remove('UNREAD_NTF_' + userId);
+    CacheService.getScriptCache().removeAll(
+      ['UNREAD_NTF_' + userId, employeeId ? 'UNREAD_NTF_' + employeeId : ''].filter(Boolean)
+    );
   } catch (error) {
     // Best-effort only.
   }

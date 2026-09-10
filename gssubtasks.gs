@@ -49,17 +49,25 @@ function findStaffPerson_(staffId) {
   }) || null;
 }
 
+function computeSubtaskProgressPercent_(subtasks) {
+  var list = Array.isArray(subtasks) ? subtasks : [];
+  var total = list.length;
+  if (!total) {
+    return 0;
+  }
+  var completed = list.filter(function (item) {
+    return normalizeString_(item.Status || item.status).toLowerCase() === 'completed';
+  }).length;
+  return Math.round((completed / total) * 100);
+}
+
 function recalculateTaskProgressFromSubtasks_(taskId, user) {
   var task = findTaskRecord_(taskId);
   if (!task) {
     return 0;
   }
   var subtasks = getSubtasksForTask_(taskId);
-  var total = subtasks.length;
-  var completed = subtasks.filter(function (record) {
-    return normalizeString_(record.Status).toLowerCase() === 'completed';
-  }).length;
-  var progress = total ? Math.round((completed / total) * 100) : 0;
+  var progress = computeSubtaskProgressPercent_(subtasks);
   var schema = resolveSchema_('TASKS');
   var sheet = getSheetBySchema_(schema);
   var updated = Object.assign({}, task);
@@ -159,9 +167,10 @@ function listTaskSubtasks(sessionToken, payload) {
       throw new Error('taskId is required.');
     }
     assertTaskVisible_(authContext.user, taskId);
+    var items = getSubtasksForTask_(taskId).map(mapSubtask_);
     return successResponse_('Subtasks loaded.', {
-      items: getSubtasksForTask_(taskId).map(mapSubtask_),
-      progress: recalculateTaskProgressFromSubtasks_(taskId, authContext.user)
+      items: items,
+      progress: computeSubtaskProgressPercent_(items)
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load subtasks.');

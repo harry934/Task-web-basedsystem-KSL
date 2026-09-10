@@ -12,6 +12,11 @@ function listProgressUpdates(sessionToken, options) {
     var pageSize = normalizeNumber_(filters.pageSize, 25);
     var employeeId = normalizeString_(authContext.user.employeeId);
     var isEmployeeOnly = isStaffLikeRole_(authContext.user.role);
+    try {
+      ensureTaskUpdatesSchema_();
+    } catch (ignore) {
+      // Keep listing even if extra file columns cannot be added yet.
+    }
 
     var items = readSheetRecords_('TASK_UPDATES')
       .filter(function (record) {
@@ -55,12 +60,8 @@ function createProgressUpdate(sessionToken, payload) {
     );
     var input = payload || {};
     var taskId = normalizeString_(input.taskId);
-    var progress = normalizeNumber_(input.progress, 0);
     if (!taskId) {
       throw new Error('Task ID is required.');
-    }
-    if (progress < 0 || progress > 100) {
-      throw new Error('Progress must be between 0 and 100.');
     }
     var employeeId = normalizeString_(input.employeeId || authContext.user.employeeId);
     if (!employeeId) {
@@ -80,7 +81,6 @@ function createProgressUpdate(sessionToken, payload) {
     if (assignment) {
       return submitMyProgress(sessionToken, {
         assignmentId: assignment['Assignment ID'],
-        progress: progress,
         status: input.status,
         hoursWorked: input.hoursWorked,
         workCompleted: input.workCompleted,
@@ -88,7 +88,10 @@ function createProgressUpdate(sessionToken, payload) {
         challenges: input.challenges,
         blockers: input.blockers,
         nextAction: input.nextAction,
-        remarks: input.remarks
+        remarks: input.remarks,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        base64: input.base64
       });
     }
     throw new Error('No active assignment was found for this task and staff member.');
@@ -191,7 +194,44 @@ function mapProgressForResponse_(record) {
     remarks: normalizeString_(record['Employee Remarks']),
     supervisorReview: normalizeString_(record['Supervisor Review'] || 'Pending'),
     supervisorComment: normalizeString_(record['Supervisor Comment']),
+    fileName: normalizeString_(record['File Name']),
+    fileUrl: normalizeString_(record['File URL']),
     updateDate: toClientDate_(record['Update Date']),
     createdTimestamp: toClientDate_(record['Created Timestamp'])
+  };
+}
+
+function ensureTaskUpdatesSchema_() {
+  var schema = resolveSchema_('TASK_UPDATES');
+  ensureSheetSchema_(getDatabaseSpreadsheet_(), schema);
+  return schema;
+}
+
+function storeProgressPdfFromInput_(input) {
+  var fileName = normalizeString_(input && input.fileName);
+  if (!fileName || !(input && input.base64)) {
+    return { fileName: '', fileUrl: '', fileId: '', mimeType: '', fileSize: 0 };
+  }
+  var mimeType = normalizeString_(input.mimeType || '').toLowerCase();
+  if (mimeType !== 'application/pdf' && !/\.pdf$/i.test(fileName)) {
+    throw new Error('Only PDF files are allowed.');
+  }
+  var bytes = Utilities.base64Decode(String(input.base64));
+  if (!bytes || bytes.length < 1024) {
+    throw new Error('The PDF is too small or empty.');
+  }
+  var maxMb = Math.max(1, normalizeNumber_(getSettingValue_('MAX_SUBTASK_PDF_MB', 2), 2));
+  if (bytes.length > maxMb * 1024 * 1024) {
+    throw new Error('The PDF must be ' + maxMb + ' MB or smaller.');
+  }
+  var folder = getAttachmentsFolder_();
+  var blob = Utilities.newBlob(bytes, 'application/pdf', fileName);
+  var file = folder.createFile(blob);
+  return {
+    fileName: fileName,
+    fileUrl: file.getUrl(),
+    fileId: file.getId(),
+    mimeType: 'application/pdf',
+    fileSize: bytes.length
   };
 }
