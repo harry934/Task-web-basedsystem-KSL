@@ -1269,6 +1269,103 @@
       return 'status-' + normalized;
     };
 
+    KSL.formatRelativeTime = function (value) {
+      if (!value) {
+        return '';
+      }
+      var date = value instanceof Date ? value : new Date(value);
+      if (isNaN(date.getTime())) {
+        return '';
+      }
+      var diff = Date.now() - date.getTime();
+      var minutes = Math.round(diff / 60000);
+      if (minutes < 1) {
+        return 'Just now';
+      }
+      if (minutes < 60) {
+        return minutes + (minutes === 1 ? ' min ago' : ' mins ago');
+      }
+      var hours = Math.round(minutes / 60);
+      if (hours < 24) {
+        return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+      }
+      var days = Math.round(hours / 24);
+      if (days < 7) {
+        return days + (days === 1 ? ' day ago' : ' days ago');
+      }
+      return KSL.formatDate(date);
+    };
+
+    KSL.generatePassword = function () {
+      var upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      var lower = 'abcdefghijkmnpqrstuvwxyz';
+      var numbers = '23456789';
+      function pick(source) {
+        return source.charAt(Math.floor(Math.random() * source.length));
+      }
+      var chars = [pick(upper), pick(upper), pick(lower), pick(lower), pick(lower), pick(lower), pick(numbers), pick(numbers), pick(upper), pick(lower)];
+      var i;
+      for (i = chars.length - 1; i > 0; i -= 1) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var hold = chars[i];
+        chars[i] = chars[j];
+        chars[j] = hold;
+      }
+      return chars.join('');
+    };
+
+    KSL.previewStaffUsername = function (fullName) {
+      var parts = String(fullName || '')
+        .trim()
+        .split(/\s+/)
+        .map(function (part) {
+          return part.toLowerCase().replace(/[^a-z]/g, '');
+        })
+        .filter(Boolean);
+      if (!parts.length) {
+        return '';
+      }
+      var initials = parts
+        .map(function (part) {
+          return part.charAt(0);
+        })
+        .join('');
+      if (initials.length < 2) {
+        initials = (parts[0] || 'stf').substring(0, 3);
+      }
+      return initials + '.ksl';
+    };
+
+    KSL.maybeRequirePasswordChange = function () {
+      var user = KSL.state.currentUser || {};
+      var modal = document.getElementById('kslMustChangeModal');
+      var cancel = document.getElementById('kslMustChangeCancel');
+      if (!modal) {
+        return;
+      }
+      if (cancel) {
+        cancel.classList.toggle('hidden', Boolean(user.mustChangePassword));
+      }
+      if (user.mustChangePassword) {
+        KSL.openModal('kslMustChangeModal');
+      } else {
+        KSL.closeModal('kslMustChangeModal');
+      }
+    };
+
+    KSL.openAccountModal = function () {
+      var user = KSL.state.currentUser || {};
+      var username = document.getElementById('kslAccountUsername');
+      var email = document.getElementById('kslAccountEmail');
+      if (username) {
+        username.value = user.username || '';
+      }
+      if (email) {
+        email.value = user.email || '';
+      }
+      KSL.openModal('kslAccountModal');
+    };
+
     KSL.formatDate = function (value) {
       if (!value) {
         return '';
@@ -1349,7 +1446,7 @@
         userNameElement.textContent = user.fullName || 'Unknown User';
       }
       if (userRoleElement) {
-        userRoleElement.innerHTML = KSL.roleBadgeHtml(role, user);
+        userRoleElement.textContent = KSL.displayRole(role, user);
       }
       if (userAvatarElement) {
         userAvatarElement.src =
@@ -1367,16 +1464,20 @@
       KSL.hideAccessGate();
       KSL.hideBootOverlay();
       KSL.startUnreadBadgePolling();
+      KSL.maybeRequirePasswordChange();
     };
 
     KSL.setUnreadBadge = function (count) {
       var badgeElement = document.getElementById('notificationBadge');
-      if (!badgeElement) {
-        return;
-      }
+      var label = document.getElementById('notificationUnreadLabel');
       var unreadCount = Math.max(0, Number(count || 0));
-      badgeElement.textContent = String(unreadCount);
-      badgeElement.classList.toggle('hidden', unreadCount < 1);
+      if (badgeElement) {
+        badgeElement.textContent = String(unreadCount);
+        badgeElement.classList.toggle('hidden', unreadCount < 1);
+      }
+      if (label) {
+        label.textContent = unreadCount === 1 ? '1 unread' : unreadCount + ' unread';
+      }
     };
 
     KSL.startUnreadBadgePolling = function () {
@@ -1717,15 +1818,18 @@
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Unable to load notifications.');
           }
-          var items = ((response.data || {}).items) || [];
+          var payload = response.data || {};
+          var items = payload.items || [];
+          var unread = Number((payload.pagination || {}).total || items.length);
+          KSL.setUnreadBadge(unread);
           if (!items.length) {
-            list.innerHTML = '<p class="page-note">No unread notifications.</p>';
+            list.innerHTML = '<p class="page-note">You are up to date.</p>';
             return;
           }
           list.innerHTML = items
             .map(function (item) {
               return (
-                '<button class="notification-item" type="button" data-notification-id="' +
+                '<button class="notification-item is-unread" type="button" data-notification-id="' +
                 KSL.escapeHtml(item.notificationId) +
                 '" data-task-id="' +
                 KSL.escapeHtml(item.relatedTaskId || '') +
@@ -1733,7 +1837,9 @@
                 KSL.escapeHtml(item.title || 'Notification') +
                 '</strong><span>' +
                 KSL.escapeHtml(item.message || '') +
-                '</span></button>'
+                '</span><em>' +
+                KSL.escapeHtml(KSL.formatRelativeTime(item.createdDate) || '') +
+                '</em></button>'
               );
             })
             .join('');
@@ -1932,6 +2038,116 @@
           KSL.navigate('notifications');
         });
       }
+      var notificationMarkAll = document.getElementById('notificationMarkAll');
+      if (notificationMarkAll) {
+        notificationMarkAll.addEventListener('click', function (event) {
+          event.stopPropagation();
+          KSL.call('markAllNotificationsRead', KSL.getSessionToken())
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Update failed.');
+              }
+              KSL.setUnreadBadge(0);
+              KSL.loadNotificationDropdown();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Update failed.', 'error');
+            });
+        });
+      }
+      var accountChip = document.getElementById('accountChipButton');
+      if (accountChip) {
+        accountChip.addEventListener('click', function () {
+          KSL.openAccountModal();
+        });
+      }
+      var accountClose = document.getElementById('kslAccountClose');
+      if (accountClose) {
+        accountClose.addEventListener('click', function () {
+          KSL.closeModal('kslAccountModal');
+        });
+      }
+      var accountForm = document.getElementById('kslAccountForm');
+      if (accountForm) {
+        accountForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          KSL.call('updateOwnProfile', KSL.getSessionToken(), {
+            email: document.getElementById('kslAccountEmail').value.trim()
+          })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to save email.');
+              }
+              if (KSL.state.currentUser) {
+                KSL.state.currentUser.email = document.getElementById('kslAccountEmail').value.trim();
+              }
+              KSL.showToast('Email saved.', 'success');
+              KSL.closeModal('kslAccountModal');
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to save email.', 'error');
+            });
+        });
+      }
+      var accountPasswordButton = document.getElementById('kslAccountPasswordButton');
+      if (accountPasswordButton) {
+        accountPasswordButton.addEventListener('click', function () {
+          KSL.closeModal('kslAccountModal');
+          var cancel = document.getElementById('kslMustChangeCancel');
+          if (cancel) {
+            cancel.classList.remove('hidden');
+          }
+          var current = document.getElementById('kslMustChangeCurrent');
+          if (current) {
+            current.value = '';
+          }
+          KSL.openModal('kslMustChangeModal');
+        });
+      }
+      var mustChangeCancel = document.getElementById('kslMustChangeCancel');
+      if (mustChangeCancel) {
+        mustChangeCancel.addEventListener('click', function () {
+          if (KSL.state.currentUser && KSL.state.currentUser.mustChangePassword) {
+            return;
+          }
+          KSL.closeModal('kslMustChangeModal');
+        });
+      }
+      var mustChangeForm = document.getElementById('kslMustChangeForm');
+      if (mustChangeForm) {
+        mustChangeForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var currentPassword = document.getElementById('kslMustChangeCurrent').value;
+          var newPassword = document.getElementById('kslMustChangeNew').value;
+          var confirmPassword = document.getElementById('kslMustChangeConfirm').value;
+          var check = KSL.validatePassword(newPassword);
+          if (!check.valid) {
+            KSL.showToast('Password must include ' + check.min + '+ characters, uppercase, lowercase, and a number.', 'error');
+            return;
+          }
+          if (newPassword !== confirmPassword) {
+            KSL.showToast('Passwords do not match.', 'error');
+            return;
+          }
+          KSL.call('changeOwnPassword', KSL.getSessionToken(), {
+            currentPassword: currentPassword,
+            newPassword: newPassword
+          })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to change password.');
+              }
+              if (KSL.state.currentUser) {
+                KSL.state.currentUser.mustChangePassword = false;
+              }
+              KSL.closeModal('kslMustChangeModal');
+              KSL.showToast('Password updated.', 'success');
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to change password.', 'error');
+            });
+        });
+      }
       if (notificationList) {
         notificationList.addEventListener('click', function (event) {
           var item = event.target.closest('.notification-item');
@@ -1961,6 +2177,7 @@
       KSL.enhancePasswordField('loginPasswordInput');
       KSL.enhancePasswordField('newUserPassword', 'newUserPasswordHints');
       KSL.enhancePasswordField('kslPasswordValue', 'kslPasswordHints');
+      KSL.enhancePasswordField('kslMustChangeNew', 'kslMustChangeHints');
       if (KSL.getActivePage() !== 'login') {
         var cachedRole = readStoredRole_();
         if (cachedRole) {

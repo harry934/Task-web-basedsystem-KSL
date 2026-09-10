@@ -44,7 +44,9 @@ function listEmployees(sessionToken, options) {
         }
         return true;
       })
-      .map(mapEmployeeForResponse_)
+      .map(function (record) {
+        return attachStaffLoginFields_(mapEmployeeForResponse_(record));
+      })
       .sort(function (a, b) {
         return new Date(b.updatedDate || 0).getTime() - new Date(a.updatedDate || 0).getTime();
       });
@@ -140,13 +142,14 @@ function createEmployee(sessionToken, payload) {
     }
 
     var email = normalizeEmail_(input.email);
-    if (email) {
-      var emailTaken = existing.find(function (record) {
-        return normalizeEmail_(record.Email) === email;
-      });
-      if (emailTaken) {
-        throw new Error('An employee with this email already exists.');
-      }
+    if (!email) {
+      throw new Error('Work email is required so the sign-in details can be sent.');
+    }
+    var emailTaken = existing.find(function (record) {
+      return normalizeEmail_(record.Email) === email;
+    });
+    if (emailTaken) {
+      throw new Error('An employee with this email already exists.');
     }
 
     var now = new Date();
@@ -199,9 +202,27 @@ function createEmployee(sessionToken, payload) {
       mapEmployeeForResponse_(record)
     );
 
-    return successResponse_('Employee created.', {
+    var loginResult;
+    try {
+      loginResult = provisionStaffLogin_(authContext.user, record, input.password);
+    } catch (loginError) {
+      return successResponse_('Staff saved, but the login was not created: ' + (loginError.message || 'unknown error') + ' Use Issue login on Edit.', {
+        employeeId: employeeId,
+        employee: attachStaffLoginFields_(mapEmployeeForResponse_(record)),
+        emailSent: false,
+        username: ''
+      });
+    }
+    var employee = attachStaffLoginFields_(mapEmployeeForResponse_(record));
+    var message = loginResult.emailSent
+      ? 'Staff saved. Sign-in details were emailed.'
+      : 'Staff saved. Email could not be sent; copy the username and temporary password.';
+    return successResponse_(message, {
       employeeId: employeeId,
-      employee: mapEmployeeForResponse_(record)
+      employee: employee,
+      username: loginResult.username,
+      emailSent: loginResult.emailSent,
+      temporaryPassword: loginResult.temporaryPassword || ''
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to create employee.');
@@ -229,6 +250,9 @@ function updateEmployee(sessionToken, payload) {
     }
 
     var email = normalizeEmail_(input.email);
+    if (findUserByEmployeeId_(employeeId) && !email) {
+      throw new Error('Work email is required for staff who have a login.');
+    }
     if (email) {
       var emailTaken = records.find(function (record) {
         return (
@@ -269,6 +293,17 @@ function updateEmployee(sessionToken, payload) {
     updated['Updated Date'] = new Date();
     updateSheetRecordByRow_(sheet, current.__rowNumber, schema.columns, updated);
 
+    var linkedUser = findUserByEmployeeId_(employeeId);
+    if (linkedUser && email && normalizeEmail_(linkedUser['Google Email']) !== email) {
+      var userSchema = resolveSchema_('USERS');
+      var userSheet = getSheetBySchema_(userSchema);
+      var updatedUser = Object.assign({}, linkedUser);
+      updatedUser['Google Email'] = email;
+      updatedUser['Updated Date'] = new Date();
+      updateSheetRecordByRow_(userSheet, linkedUser.__rowNumber, userSchema.columns, updatedUser);
+      EXECUTION_USERS_CACHE_ = null;
+    }
+
     writeAuditLog_(
       authContext.user,
       'UPDATE',
@@ -280,7 +315,7 @@ function updateEmployee(sessionToken, payload) {
     );
 
     return successResponse_('Employee updated.', {
-      employee: mapEmployeeForResponse_(updated)
+      employee: attachStaffLoginFields_(mapEmployeeForResponse_(updated))
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to update employee.');
@@ -458,4 +493,40 @@ function mapEmployeeForResponse_(record) {
     overdueTasks: normalizeNumber_(record['Overdue Tasks'], 0),
     updatedDate: toClientDate_(record['Updated Date'])
   };
+}
+
+function attachStaffLoginFields_(item) {
+  var mapped = item || {};
+  var user = findUserByEmployeeId_(mapped.employeeId);
+  var credential = user ? getUserCredentialRecordByUserId_(user['User ID']) : null;
+  mapped.username = credential ? normalizeUsername_(credential.Username) : '';
+  mapped.hasLogin = Boolean(credential);
+  mapped.userId = user ? normalizeString_(user['User ID']) : '';
+  return mapped;
+}
+
+function issueStaffLogin(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, EMPLOYEE_ACCESS_ROLES, 'employees');
+    var employeeId = normalizeString_(payload && payload.employeeId);
+    if (!employeeId) {
+      throw new Error('employeeId is required.');
+    }
+    var employee = findEmployeeRecordById_(employeeId);
+    if (!employee) {
+      throw new Error('Staff member was not found.');
+    }
+    var loginResult = provisionStaffLogin_(authContext.user, employee, payload && payload.password);
+    var message = loginResult.emailSent
+      ? 'Login emailed to the staff member.'
+      : 'Login created. Email could not be sent; copy the username and temporary password.';
+    return successResponse_(message, {
+      employee: attachStaffLoginFields_(mapEmployeeForResponse_(employee)),
+      username: loginResult.username,
+      emailSent: loginResult.emailSent,
+      temporaryPassword: loginResult.temporaryPassword || ''
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to issue staff login.');
+  }
 }

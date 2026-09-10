@@ -180,6 +180,160 @@ function deactivateDimensionValue(sessionToken, payload) {
   }
 }
 
+function protectedDimensionValues_() {
+  return {
+    Roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff', 'Employee'],
+    'Account Statuses': ['Active', 'Suspended', 'Disabled']
+  };
+}
+
+function assertDimensionValueMutable_(column, value) {
+  var protectedMap = protectedDimensionValues_();
+  var locked = protectedMap[column] || [];
+  if (
+    locked.some(function (item) {
+      return normalizeString_(item).toLowerCase() === normalizeString_(value).toLowerCase();
+    })
+  ) {
+    throw new Error('This value is used by the system and cannot be renamed or deleted.');
+  }
+}
+
+function dimensionUsageTargets_(column) {
+  var map = {
+    Departments: [
+      { schema: 'EMPLOYEES', field: 'Department' },
+      { schema: 'USERS', field: 'Department' },
+      { schema: 'TASKS', field: 'Department' },
+      { schema: 'TASK_ASSIGNMENTS', field: 'Department' },
+      { schema: 'DEPARTMENTS', field: 'Department Name' }
+    ],
+    Sections: [
+      { schema: 'EMPLOYEES', field: 'Section' },
+      { schema: 'TASKS', field: 'Section' }
+    ],
+    Teams: [
+      { schema: 'EMPLOYEES', field: 'Team' },
+      { schema: 'TASKS', field: 'Team' },
+      { schema: 'TASK_ASSIGNMENTS', field: 'Team' },
+      { schema: 'TEAMS', field: 'Team Name' }
+    ],
+    'Job Titles': [
+      { schema: 'EMPLOYEES', field: 'Job Title' },
+      { schema: 'USERS', field: 'Job Title' }
+    ],
+    'Task Categories': [{ schema: 'TASKS', field: 'Task Category' }],
+    'Task Types': [{ schema: 'TASKS', field: 'Task Type' }],
+    Priorities: [{ schema: 'TASKS', field: 'Priority' }],
+    'Task Statuses': [{ schema: 'TASKS', field: 'Status' }],
+    'Delay Reasons': [{ schema: 'TASKS', field: 'Delay Reason' }],
+    'Work Locations': [{ schema: 'EMPLOYEES', field: 'Work Location' }],
+    'Employment Types': [{ schema: 'EMPLOYEES', field: 'Employment Type' }]
+  };
+  return map[column] || [];
+}
+
+function cascadeDimensionRename_(column, oldValue, newValue) {
+  dimensionUsageTargets_(column).forEach(function (target) {
+    var schema = resolveSchema_(target.schema);
+    var sheet = getSheetBySchema_(schema);
+    safeReadSheetRecords_(schema).forEach(function (record) {
+      if (normalizeString_(record[target.field]) !== oldValue) {
+        return;
+      }
+      var updated = Object.assign({}, record);
+      updated[target.field] = newValue;
+      updateSheetRecordByRow_(sheet, record.__rowNumber, schema.columns, updated);
+    });
+  });
+}
+
+function updateDimensionValue(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'settings');
+    var input = payload || {};
+    var column = normalizeString_(input.column);
+    var oldValue = normalizeString_(input.oldValue);
+    var newValue = normalizeString_(input.newValue);
+    if (!column || !oldValue || !newValue) {
+      throw new Error('column, oldValue, and newValue are required.');
+    }
+    if (oldValue === newValue) {
+      return successResponse_('Dimension value unchanged.', {});
+    }
+    assertDimensionValueMutable_(column, oldValue);
+    var schema = resolveSchema_('DIMENSIONS');
+    if (schema.columns.indexOf(column) === -1) {
+      throw new Error('Unknown dimension column.');
+    }
+    return withScriptLock_(function () {
+      var sheet = getSheetBySchema_(schema);
+      var records = safeReadSheetRecords_(schema);
+      var duplicate = records.some(function (record) {
+        var raw = normalizeString_(record[column]);
+        var plain = raw.indexOf(INACTIVE_DIMENSION_PREFIX_) === 0 ? raw.substring(INACTIVE_DIMENSION_PREFIX_.length) : raw;
+        return plain === newValue;
+      });
+      if (duplicate) {
+        throw new Error('That dimension value already exists.');
+      }
+      var current = records.find(function (record) {
+        var raw = normalizeString_(record[column]);
+        return raw === oldValue || raw === INACTIVE_DIMENSION_PREFIX_ + oldValue;
+      });
+      if (!current) {
+        throw new Error('Dimension value was not found.');
+      }
+      var wasInactive = normalizeString_(current[column]).indexOf(INACTIVE_DIMENSION_PREFIX_) === 0;
+      var updated = Object.assign({}, current);
+      updated[column] = wasInactive ? INACTIVE_DIMENSION_PREFIX_ + newValue : newValue;
+      updateSheetRecordByRow_(sheet, current.__rowNumber, schema.columns, updated);
+      cascadeDimensionRename_(column, oldValue, newValue);
+      clearSettingsAndDimensionsCache_();
+      writeAuditLog_(authContext.user, 'UPDATE', 'Dimensions', column, 'Renamed dimension value.', oldValue, newValue);
+      return successResponse_('Dimension value updated.', {});
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to update dimension value.');
+  }
+}
+
+function deleteDimensionValue(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'settings');
+    var input = payload || {};
+    var column = normalizeString_(input.column);
+    var value = normalizeString_(input.value);
+    if (!column || !value) {
+      throw new Error('column and value are required.');
+    }
+    assertDimensionValueMutable_(column, value);
+    var schema = resolveSchema_('DIMENSIONS');
+    if (schema.columns.indexOf(column) === -1) {
+      throw new Error('Unknown dimension column.');
+    }
+    return withScriptLock_(function () {
+      var sheet = getSheetBySchema_(schema);
+      var records = safeReadSheetRecords_(schema);
+      var current = records.find(function (record) {
+        var raw = normalizeString_(record[column]);
+        return raw === value || raw === INACTIVE_DIMENSION_PREFIX_ + value;
+      });
+      if (!current) {
+        throw new Error('Dimension value was not found.');
+      }
+      var updated = Object.assign({}, current);
+      updated[column] = '';
+      updateSheetRecordByRow_(sheet, current.__rowNumber, schema.columns, updated);
+      clearSettingsAndDimensionsCache_();
+      writeAuditLog_(authContext.user, 'DELETE', 'Dimensions', column, 'Deleted dimension value.', value, '');
+      return successResponse_('Dimension value deleted.', {});
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to delete dimension value.');
+  }
+}
+
 function backupSettingsConfig(sessionToken) {
   try {
     requireSession_(sessionToken, ['Administrator'], 'settings');

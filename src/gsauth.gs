@@ -91,7 +91,8 @@ function loginWithPassword(payload) {
     return successResponse_('Login successful.', {
       sessionToken: session.sessionToken,
       sessionTtlSeconds: session.ttlSeconds,
-      user: activeUser
+      user: activeUser,
+      mustChangePassword: Boolean(activeUser.mustChangePassword)
     });
   } catch (error) {
     return errorResponse_(error.message || 'Login failed.');
@@ -152,6 +153,113 @@ function logoutSession(sessionToken) {
     return successResponse_('Logged out successfully.');
   } catch (error) {
     return errorResponse_(error.message || 'Logout failed.');
+  }
+}
+
+function changeOwnPassword(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, [], '', { skipActivity: true });
+    var input = payload || {};
+    var currentPassword = String(input.currentPassword || '');
+    var newPassword = String(input.newPassword || '');
+    if (!currentPassword || !newPassword) {
+      throw new Error('Current and new passwords are required.');
+    }
+    if (currentPassword === newPassword) {
+      throw new Error('Choose a new password that is different from the current one.');
+    }
+    assertPasswordStrength_(newPassword);
+    var credential = getUserCredentialRecordByUserId_(authContext.user.userId);
+    if (!credential) {
+      throw new Error('Login credentials were not found.');
+    }
+    if (!verifyCredentialPassword_(credential, currentPassword)) {
+      throw new Error('Current password is incorrect.');
+    }
+    setUserCredential_(
+      authContext.user.userId,
+      credential.Username,
+      newPassword,
+      authContext.user.userId,
+      false
+    );
+    writeAuditLog_(
+      authContext.user,
+      'PASSWORD_CHANGE',
+      'Users',
+      authContext.user.userId,
+      'User changed their password.',
+      '',
+      { username: credential.Username }
+    );
+    return successResponse_('Password updated.', { mustChangePassword: false });
+  } catch (error) {
+    return errorResponse_(error.message || 'Unable to change password.');
+  }
+}
+
+function updateOwnProfile(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, [], '');
+    var input = payload || {};
+    if (Object.prototype.hasOwnProperty.call(input, 'username') && normalizeString_(input.username)) {
+      throw new Error('Username cannot be changed.');
+    }
+    var email = normalizeEmail_(input.email);
+    if (!email) {
+      throw new Error('Work email is required.');
+    }
+    var userRecord = getUserRecordByUserId_(authContext.user.userId);
+    if (!userRecord) {
+      throw new Error('User account was not found.');
+    }
+    var existingEmailUser = getUserRecordByEmail_(email);
+    if (existingEmailUser && normalizeString_(existingEmailUser['User ID']) !== authContext.user.userId) {
+      throw new Error('Another account already uses this email.');
+    }
+    var userSchema = resolveSchema_('USERS');
+    var userSheet = getSheetBySchema_(userSchema);
+    var updatedUser = Object.assign({}, userRecord);
+    updatedUser['Google Email'] = email;
+    updatedUser['Updated Date'] = new Date();
+    updatedUser['Updated By'] = authContext.user.userId;
+    updateSheetRecordByRow_(userSheet, userRecord.__rowNumber, userSchema.columns, updatedUser);
+    EXECUTION_USERS_CACHE_ = null;
+
+    var employeeId = normalizeString_(userRecord['Employee ID']);
+    if (employeeId) {
+      var employee = findEmployeeRecordById_(employeeId);
+      if (employee) {
+        var employeeSchema = resolveSchema_('EMPLOYEES');
+        var employeeSheet = getSheetBySchema_(employeeSchema);
+        var updatedEmployee = Object.assign({}, employee);
+        var emailTaken = safeReadSheetRecords_(employeeSchema).some(function (record) {
+          return (
+            normalizeEmail_(record.Email) === email &&
+            normalizeString_(record['Employee ID']) !== employeeId
+          );
+        });
+        if (emailTaken) {
+          throw new Error('Another staff record already uses this email.');
+        }
+        updatedEmployee.Email = email;
+        updatedEmployee['Updated Date'] = new Date();
+        updateSheetRecordByRow_(employeeSheet, employee.__rowNumber, employeeSchema.columns, updatedEmployee);
+      }
+    }
+
+    writeAuditLog_(
+      authContext.user,
+      'UPDATE',
+      'Users',
+      authContext.user.userId,
+      'User updated their work email.',
+      userRecord['Google Email'],
+      email
+    );
+    return successResponse_('Email updated.', { email: email });
+  } catch (error) {
+    return errorResponse_(error.message || 'Unable to update profile.');
   }
 }
 

@@ -44,6 +44,7 @@ var KSL_SLICE1_SCHEMAS = {
       'Lockout Until',
       'Last Login',
       'Last Password Change',
+      'Must Change Password',
       'Created Date',
       'Updated Date',
       'Updated By'
@@ -855,7 +856,7 @@ function getDimensionSeedMap_() {
     'Work Locations': ['Main Yard', 'Dry Dock', 'Workshop', 'Office'],
     'Employment Types': ['Permanent', 'Contract', 'Intern'],
     'Performance Ratings': ['Excellent', 'Good', 'Satisfactory', 'Needs Improvement'],
-    'Notification Types': ['Assignment', 'Due Soon', 'Overdue', 'Progress Review', 'Account'],
+    'Notification Types': ['Assignment', 'Due Soon', 'Overdue', 'Progress Review', 'Account', 'System'],
     Roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff'],
     'Account Statuses': ['Active', 'Suspended', 'Disabled']
   };

@@ -87,7 +87,7 @@
             </div>
             <div class="topbar-right">
               <div class="notification-wrap">
-                <button id="notificationButton" class="icon-button" type="button" title="Notifications" aria-expanded="false">
+                <button id="notificationButton" class="icon-button icon-quiet" type="button" title="Notifications" aria-expanded="false">
                   <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.1-1.6-5.6-4.5-6.3V4c0-.8-.7-1.5-1.5-1.5S10.5 3.2 10.5 4v.7C7.6 5.4 6 7.9 6 11v5l-2 2v1h16v-1l-2-2z"/>
                   </svg>
@@ -95,22 +95,28 @@
                 </button>
                 <div id="notificationDropdown" class="notification-dropdown hidden">
                   <div class="notification-dropdown-header">
-                    <strong>Notifications</strong>
-                    <button id="notificationViewAll" class="btn btn-outline" type="button">View all</button>
+                    <div>
+                      <strong>Notifications</strong>
+                      <span id="notificationUnreadLabel" class="notification-count">0 unread</span>
+                    </div>
+                    <div class="notification-dropdown-actions">
+                      <button id="notificationMarkAll" class="btn-quiet" type="button">Mark all read</button>
+                      <button id="notificationViewAll" class="btn-quiet" type="button">View all</button>
+                    </div>
                   </div>
                   <div id="notificationDropdownList" class="notification-dropdown-list">
-                    <p class="page-note">No unread notifications.</p>
+                    <p class="page-note">You are up to date.</p>
                   </div>
                 </div>
               </div>
-              <div class="user-chip">
+              <button id="accountChipButton" class="user-chip" type="button" title="My account">
                 <img id="userAvatar" alt="User profile photo">
                 <div class="user-meta">
                   <strong id="userFullName">Loading...</strong>
                   <span id="userRole">-</span>
                 </div>
-              </div>
-              <button id="logoutButton" class="btn btn-outline" type="button">
+              </button>
+              <button id="logoutButton" class="btn-quiet" type="button">
                 <i class="fa-solid fa-right-from-bracket"></i>
                 Sign out
               </button>
@@ -204,6 +210,58 @@
           <button class="btn btn-outline" type="button" id="kslPdfPreviewCloseFooter">Close</button>
           <button class="btn btn-primary" type="button" id="kslPdfPreviewDownload">Download</button>
         </div>
+      </div>
+    </div>
+
+    <div id="kslAccountModal" class="modal-backdrop hidden">
+      <div class="modal modal-narrow">
+        <div class="modal-header">
+          <h3>My account</h3>
+          <button class="btn btn-outline" type="button" id="kslAccountClose">Close</button>
+        </div>
+        <form id="kslAccountForm">
+          <div class="field">
+            <label for="kslAccountUsername">Username</label>
+            <input id="kslAccountUsername" class="input" type="text" readonly>
+            <p class="page-note">Username cannot be changed.</p>
+          </div>
+          <div class="field">
+            <label for="kslAccountEmail">Work email</label>
+            <input id="kslAccountEmail" class="input" type="email" required>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" type="button" id="kslAccountPasswordButton">Change password</button>
+            <button class="btn btn-primary" type="submit">Save email</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="kslMustChangeModal" class="modal-backdrop hidden">
+      <div class="modal modal-narrow">
+        <div class="modal-header">
+          <h3>Set a new password</h3>
+        </div>
+        <p class="page-note">Your temporary password must be changed before you can use the system.</p>
+        <form id="kslMustChangeForm">
+          <div class="field">
+            <label for="kslMustChangeCurrent">Current password</label>
+            <input id="kslMustChangeCurrent" class="input" type="password" autocomplete="current-password" required>
+          </div>
+          <div class="field">
+            <label for="kslMustChangeNew">New password</label>
+            <input id="kslMustChangeNew" class="input" type="password" autocomplete="new-password" required>
+            <div id="kslMustChangeHints" class="password-hints"></div>
+          </div>
+          <div class="field">
+            <label for="kslMustChangeConfirm">Confirm new password</label>
+            <input id="kslMustChangeConfirm" class="input" type="password" autocomplete="new-password" required>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline hidden" type="button" id="kslMustChangeCancel">Cancel</button>
+            <button class="btn btn-primary" type="submit">Save password</button>
+          </div>
+        </form>
       </div>
     </div>
 

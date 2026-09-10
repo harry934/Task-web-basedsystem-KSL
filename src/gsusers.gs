@@ -6,16 +6,22 @@ function createUserAccount(sessionToken, payload) {
     var fullName = normalizeString_(input.fullName);
     var email = normalizeEmail_(input.email);
     var password = String(input.password || '');
-    var role = normalizeStoredRole_(input.role || 'Staff');
+    var role = normalizeStoredRole_(input.role || 'Administrator');
     var employeeId = normalizeString_(input.employeeId);
     if (!username || !password) {
       throw new Error('Username and password are required.');
     }
-    if (role === 'Administrator' && !isSuperAdminUser_(authContext.user.userId)) {
-      throw new Error('Only the Super Admin can create another administrator.');
+    if (!email) {
+      throw new Error('Work email is required.');
     }
-    if (role !== 'Administrator' && !employeeId) {
-      throw new Error('Select the staff member this login belongs to. Create them on the Staff page first.');
+    if (isStaffLikeRole_(role)) {
+      throw new Error('Register that person on Staff. This page does not create staff logins.');
+    }
+    if (role !== 'Administrator') {
+      throw new Error('Use Staff to register people, then change their role here.');
+    }
+    if (!isSuperAdminUser_(authContext.user.userId)) {
+      throw new Error('Only the Super Admin can create another administrator.');
     }
     var staffRecord = null;
     if (employeeId) {
@@ -89,7 +95,7 @@ function createUserAccount(sessionToken, payload) {
       'Updated Date': now
     };
     appendSheetRecord_(sheet, schema.columns, userRecord);
-    setUserCredential_(userId, username, password, authContext.user.userId);
+    setUserCredential_(userId, username, password, authContext.user.userId, true);
     EXECUTION_USERS_CACHE_ = null;
     EXECUTION_CREDENTIALS_CACHE_ = null;
     writeAuditLog_(authContext.user, 'CREATE', 'Users', userId, 'Administrator created a user account.', '', {
@@ -336,7 +342,7 @@ function adminResetUserPassword(sessionToken, payload) {
       throw new Error('Username is required to create or reset credentials.');
     }
 
-    setUserCredential_(userId, resolvedUsername, password, authContext.user.userId);
+    setUserCredential_(userId, resolvedUsername, password, authContext.user.userId, true);
 
     writeAuditLog_(
       authContext.user,

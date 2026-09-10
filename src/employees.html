@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>Staff</h1>
-    <p>Add staff so they can be assigned tasks. Login accounts are created separately under Users.</p>
+    <p>People who can be assigned work. Saving a new staff member emails them a username and a temporary password. Roles and access are managed under Login accounts.</p>
   </div>
 
   <div class="card">
@@ -40,12 +40,13 @@
           <th>Department</th>
           <th>Job title</th>
           <th>Email</th>
+          <th>Username</th>
           <th>Status</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="employeesTableBody">
-        <tr><td colspan="7" class="empty-state">Loading staff...</td></tr>
+        <tr><td colspan="8" class="empty-state">Loading staff...</td></tr>
       </tbody>
     </table>
   </div>
@@ -71,7 +72,7 @@
         </div>
         <div class="field">
           <label for="employeeEmailInput">Work email</label>
-          <input id="employeeEmailInput" class="input" type="email">
+          <input id="employeeEmailInput" class="input" type="email" required>
         </div>
         <div class="field">
           <label for="employeePhoneInput">Phone</label>
@@ -126,6 +127,23 @@
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </select>
+        </div>
+        <div id="staffLoginFields" class="field full">
+          <label for="employeeUsernameInput">Username</label>
+          <input id="employeeUsernameInput" class="input" type="text" readonly>
+          <p class="page-note">Generated from initials plus .ksl. Username cannot be changed later.</p>
+        </div>
+        <div id="staffPasswordFields" class="field full">
+          <label for="employeePasswordInput">Generated password</label>
+          <div class="toolbar-left">
+            <input id="employeePasswordInput" class="input" type="text" readonly>
+            <button id="generateStaffPasswordButton" class="btn btn-outline" type="button">Generate</button>
+          </div>
+          <p class="page-note">This temporary password is emailed. They must change it after signing in.</p>
+        </div>
+        <div id="staffIssueLoginWrap" class="field full hidden">
+          <button id="issueStaffLoginButton" class="btn btn-outline" type="button">Issue login</button>
+          <p class="page-note">This person does not have a login yet.</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -205,7 +223,7 @@
     function renderTable() {
       var body = document.getElementById('employeesTableBody');
       if (!state.items.length) {
-        body.innerHTML = '<tr><td colspan="7" class="empty-state">No staff yet. Click New staff.</td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="empty-state">No staff yet. Click New staff.</td></tr>';
         return;
       }
       body.innerHTML = state.items
@@ -221,6 +239,8 @@
             KSL.escapeHtml(item.jobTitle || '-') +
             '</td><td>' +
             KSL.escapeHtml(item.email || '-') +
+            '</td><td>' +
+            KSL.escapeHtml(item.username || (item.hasLogin ? '-' : 'Not issued')) +
             '</td><td><span class="status-badge ' +
             KSL.statusClass(item.employmentStatus) +
             '">' +
@@ -303,6 +323,50 @@
         });
     }
 
+    function refreshUsernamePreview() {
+      var usernameInput = document.getElementById('employeeUsernameInput');
+      if (!usernameInput || usernameInput.dataset.locked === '1') {
+        return;
+      }
+      usernameInput.value = KSL.previewStaffUsername(document.getElementById('employeeFullNameInput').value);
+    }
+
+    function setLoginFields(item) {
+      var passwordWrap = document.getElementById('staffPasswordFields');
+      var issueWrap = document.getElementById('staffIssueLoginWrap');
+      var usernameInput = document.getElementById('employeeUsernameInput');
+      var passwordInput = document.getElementById('employeePasswordInput');
+      var hasLogin = Boolean(item && item.hasLogin);
+      var isCreate = !item;
+      if (usernameInput) {
+        usernameInput.dataset.locked = hasLogin ? '1' : '';
+        usernameInput.value = hasLogin ? item.username || '' : KSL.previewStaffUsername(document.getElementById('employeeFullNameInput').value);
+      }
+      if (passwordWrap) {
+        passwordWrap.classList.toggle('hidden', hasLogin);
+      }
+      if (issueWrap) {
+        issueWrap.classList.toggle('hidden', isCreate || hasLogin);
+      }
+      if (passwordInput && !hasLogin) {
+        passwordInput.value = KSL.generatePassword();
+      }
+    }
+
+    function showIssuedLogin(response) {
+      var data = (response && response.data) || {};
+      if (data.emailSent) {
+        KSL.showToast((response && response.message) || 'Sign-in details emailed.', 'success');
+        return;
+      }
+      var username = data.username || '';
+      var password = data.temporaryPassword || '';
+      KSL.showToast(
+        'Email was not sent. Username: ' + username + (password ? '  Password: ' + password : ''),
+        'info'
+      );
+    }
+
     function openCreate() {
       document.getElementById('employeeForm').reset();
       document.getElementById('employeeIdInput').value = '';
@@ -314,6 +378,7 @@
       KSL.previewNextId('EMP').then(function (nextId) {
         document.getElementById('employeeNumberInput').value = nextId || 'Generated on save';
       });
+      setLoginFields(null);
       KSL.openModal('employeeModalBackdrop');
     }
 
@@ -353,6 +418,7 @@
             date.getFullYear() + '-' + mm + '-' + dd;
         }
       }
+      setLoginFields(item);
       KSL.openModal('employeeModalBackdrop');
     }
 
@@ -375,7 +441,10 @@
           return select && select.selectedIndex > 0 ? select.options[select.selectedIndex].text : '';
         })(),
         dateJoined: document.getElementById('employeeDateJoinedInput').value,
-        employmentStatus: document.getElementById('employeeStatusInput').value
+        employmentStatus: document.getElementById('employeeStatusInput').value,
+        password: document.getElementById('employeePasswordInput')
+          ? document.getElementById('employeePasswordInput').value
+          : ''
       };
     }
 
@@ -533,6 +602,30 @@
             });
           }
         });
+        document.getElementById('employeeFullNameInput').addEventListener('input', refreshUsernamePreview);
+        document.getElementById('generateStaffPasswordButton').addEventListener('click', function () {
+          document.getElementById('employeePasswordInput').value = KSL.generatePassword();
+        });
+        document.getElementById('issueStaffLoginButton').addEventListener('click', function () {
+          var employeeId = document.getElementById('employeeIdInput').value.trim();
+          var password = document.getElementById('employeePasswordInput').value || KSL.generatePassword();
+          document.getElementById('employeePasswordInput').value = password;
+          KSL.call('issueStaffLogin', KSL.getSessionToken(), {
+            employeeId: employeeId,
+            password: password
+          })
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Unable to issue login.');
+              }
+              showIssuedLogin(response);
+              KSL.closeModal('employeeModalBackdrop');
+              loadEmployees();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Unable to issue login.', 'error');
+            });
+        });
         document.getElementById('employeePhoneInput').addEventListener('input', function (event) {
           event.target.value = nationalPhoneDigits(event.target.value);
         });
@@ -551,7 +644,8 @@
               if (!response || !response.success) {
                 throw new Error((response && response.message) || 'Save failed.');
               }
-              KSL.showToast('Staff saved.', 'success');
+              KSL.showToast(response.message || 'Staff saved.', 'success');
+              showIssuedLogin(response);
               KSL.closeModal('employeeModalBackdrop');
               state.page = 1;
               loadEmployees();

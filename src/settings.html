@@ -26,7 +26,7 @@
       <h3>Dimensions</h3>
       <button class="btn btn-outline" type="button" data-close-modal="dimensionsModalBackdrop">Close</button>
     </div>
-    <p id="dimensionListNote" class="page-note">Dropdown lists used across Staff, Tasks, and reports. Deactivate a value to hide it without deleting history.</p>
+    <p id="dimensionListNote" class="page-note">Dropdown lists used across Staff, Tasks, and reports. You can add, edit, deactivate, or delete values.</p>
     <div class="form-grid">
       <div class="field">
         <label for="dimensionColumnInput">List</label>
@@ -264,7 +264,13 @@
                     KSL.statusClass(item.status) +
                     '">' +
                     KSL.escapeHtml(item.status) +
-                    '</span></td><td><button class="btn btn-outline" type="button" data-column="' +
+                    '</span></td><td><div class="toolbar-left">' +
+                    '<button class="btn btn-outline" type="button" data-action="edit" data-column="' +
+                    KSL.escapeHtml(item.column) +
+                    '" data-value="' +
+                    KSL.escapeHtml(item.value) +
+                    '">Edit</button>' +
+                    '<button class="btn btn-outline" type="button" data-action="toggle" data-column="' +
                     KSL.escapeHtml(item.column) +
                     '" data-value="' +
                     KSL.escapeHtml(item.value) +
@@ -272,7 +278,12 @@
                     (item.status === 'Inactive' ? '1' : '0') +
                     '">' +
                     (item.status === 'Inactive' ? 'Activate' : 'Deactivate') +
-                    '</button></td></tr>'
+                    '</button>' +
+                    '<button class="btn btn-danger" type="button" data-action="delete" data-column="' +
+                    KSL.escapeHtml(item.column) +
+                    '" data-value="' +
+                    KSL.escapeHtml(item.value) +
+                    '">Delete</button></div></td></tr>'
                   );
                 })
                 .join('')
@@ -302,7 +313,7 @@
         return;
       }
       note.textContent =
-        'Dropdown lists used across Staff, Tasks, and reports. Deactivate a value to hide it without deleting history.';
+        'Dropdown lists used across Staff, Tasks, and reports. Edit or delete a value; deactivate it to hide it from new forms.';
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -382,13 +393,64 @@
             });
         });
         document.getElementById('dimensionsTableBody').addEventListener('click', function (event) {
-          var button = event.target.closest('button[data-column]');
+          var button = event.target.closest('button[data-action][data-column]');
           if (!button) {
             return;
           }
+          var column = button.dataset.column;
+          var value = button.dataset.value;
+          if (button.dataset.action === 'edit') {
+            KSL.promptModal({
+              title: 'Edit dimension',
+              message: 'New name for “' + value + '”.',
+              label: 'Value',
+              defaultValue: value
+            }).then(function (nextValue) {
+              if (nextValue === null || String(nextValue).trim() === '') {
+                return;
+              }
+              return KSL.call('updateDimensionValue', KSL.getSessionToken(), {
+                column: column,
+                oldValue: value,
+                newValue: String(nextValue).trim()
+              }).then(function (response) {
+                if (!response || !response.success) {
+                  throw new Error((response && response.message) || 'Update failed.');
+                }
+                KSL.showToast('Dimension value updated.', 'success');
+                loadDimensions();
+              });
+            }).catch(function (error) {
+              KSL.showToast(error.message || 'Update failed.', 'error');
+            });
+            return;
+          }
+          if (button.dataset.action === 'delete') {
+            KSL.confirmModal({
+              title: 'Delete dimension',
+              message: 'Delete “' + value + '”? Existing records keep the old text, but it will leave this dropdown.'
+            }).then(function (ok) {
+              if (!ok) {
+                return;
+              }
+              return KSL.call('deleteDimensionValue', KSL.getSessionToken(), {
+                column: column,
+                value: value
+              }).then(function (response) {
+                if (!response || !response.success) {
+                  throw new Error((response && response.message) || 'Delete failed.');
+                }
+                KSL.showToast('Dimension value deleted.', 'success');
+                loadDimensions();
+              });
+            }).catch(function (error) {
+              KSL.showToast(error.message || 'Delete failed.', 'error');
+            });
+            return;
+          }
           KSL.call('deactivateDimensionValue', KSL.getSessionToken(), {
-            column: button.dataset.column,
-            value: button.dataset.value,
+            column: column,
+            value: value,
             activate: button.dataset.activate === '1'
           })
             .then(function (response) {

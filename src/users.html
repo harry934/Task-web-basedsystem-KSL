@@ -1,17 +1,13 @@
 <section class="page-shell">
   <div class="page-header">
-    <h1>User Management</h1>
-    <p>
-      Issue a login after the person exists on Staff. Login UID and Staff UID are generated automatically.
-      The Super Admin account is permanent and cannot be edited, suspended, or deleted. Only the Super Admin
-      can recruit another administrator or transfer ownership.
-    </p>
+    <h1>Login accounts</h1>
+    <p>Who can sign in, their role, and whether the account is active. Register people on Staff first; change roles here.</p>
   </div>
 
   <div class="card">
     <div class="toolbar">
       <div class="toolbar-left">
-        <button id="newUserButton" class="btn btn-primary" type="button">New User</button>
+        <button id="newUserButton" class="btn btn-primary" type="button">New administrator</button>
         <button id="usersRefreshButton" class="btn btn-outline" type="button">Refresh</button>
         <button id="usersActivateSelected" class="btn btn-outline" type="button">Activate selected</button>
         <button id="usersSuspendSelected" class="btn btn-outline" type="button">Suspend selected</button>
@@ -57,51 +53,39 @@
 <div id="newUserModalBackdrop" class="modal-backdrop hidden">
   <div class="modal">
     <div class="modal-header">
-      <h3>Create user</h3>
-      <button class="btn btn-outline" type="button" data-close-modal="newUserModalBackdrop">Close</button>
-    </div>
-    <form id="newUserForm">
-      <div class="form-grid">
-        <div class="field full">
-          <label for="newUserStaffMember">Staff member</label>
-          <select id="newUserStaffMember" class="select"></select>
-          <span class="page-note">Required except for Administrator. Create them on Staff first, then pick their name.</span>
-        </div>
-        <div class="field">
-          <label for="newUserStaffUid">Staff UID</label>
-          <input id="newUserStaffUid" class="input" type="text" readonly placeholder="Filled from the staff member">
-        </div>
-        <div class="field">
-          <label for="newUserIdPreview">Login UID</label>
-          <input id="newUserIdPreview" class="input" type="text" readonly>
-        </div>
-        <div class="field">
-          <label for="newUserFullName">Full name</label>
-          <input id="newUserFullName" class="input" type="text" required>
-        </div>
-        <div class="field">
-          <label for="newUserUsername">Username</label>
-          <input id="newUserUsername" class="input" type="text" required>
-        </div>
-        <div class="field">
-          <label for="newUserEmail">Work email</label>
-          <input id="newUserEmail" class="input" type="email">
-        </div>
-        <div class="field">
-          <label for="newUserPassword">Password</label>
-          <input id="newUserPassword" class="input" type="password" required>
-          <div id="newUserPasswordHints" class="password-hints"></div>
-        </div>
-        <div class="field">
-          <label for="newUserRole">Role</label>
-          <select id="newUserRole" class="select" required></select>
-        </div>
+        <h3>New administrator</h3>
+        <button class="btn btn-outline" type="button" data-close-modal="newUserModalBackdrop">Close</button>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" type="button" data-close-modal="newUserModalBackdrop">Cancel</button>
-        <button class="btn btn-primary" type="submit">Create user</button>
-      </div>
-    </form>
+      <p class="page-note">Staff logins are created on the Staff page. This form only adds another administrator.</p>
+      <form id="newUserForm">
+        <div class="form-grid">
+          <div class="field">
+            <label for="newUserIdPreview">Login UID</label>
+            <input id="newUserIdPreview" class="input" type="text" readonly>
+          </div>
+          <div class="field">
+            <label for="newUserFullName">Full name</label>
+            <input id="newUserFullName" class="input" type="text" required>
+          </div>
+          <div class="field">
+            <label for="newUserUsername">Username</label>
+            <input id="newUserUsername" class="input" type="text" required>
+          </div>
+          <div class="field">
+            <label for="newUserEmail">Work email</label>
+            <input id="newUserEmail" class="input" type="email" required>
+          </div>
+          <div class="field full">
+            <label for="newUserPassword">Temporary password</label>
+            <input id="newUserPassword" class="input" type="password" required>
+            <div id="newUserPasswordHints" class="password-hints"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" type="button" data-close-modal="newUserModalBackdrop">Cancel</button>
+          <button class="btn btn-primary" type="submit">Create administrator</button>
+        </div>
+      </form>
   </div>
 </div>
 
@@ -177,39 +161,14 @@
         .replace(/^\.+|\.+$/g, '');
     }
 
-    function applySelectedStaff() {
-      var select = document.getElementById('newUserStaffMember');
-      var staffUid = document.getElementById('newUserStaffUid');
-      var id = select ? select.value : '';
-      var person = (state.staff || []).find(function (item) {
-        return (item.employeeId || item.staffId) === id;
-      });
-      staffUid.value = person ? person.employeeId || person.staffId || '' : '';
-      if (!person) {
-        return;
-      }
-      if (person.fullName) {
-        document.getElementById('newUserFullName').value = person.fullName;
-      }
-      if (person.email) {
-        document.getElementById('newUserEmail').value = person.email;
-      }
-      var usernameInput = document.getElementById('newUserUsername');
-      if (usernameInput && !usernameInput.value.trim()) {
-        usernameInput.value = suggestUsernameFromPerson(person);
-      }
-    }
-
-    function loadStaffSelects(selectedStaffId) {
+    function loadStaffSelects() {
       return KSL.call('listEmployees', KSL.getSessionToken(), {
         status: 'Active',
         page: 1,
         pageSize: 1000
       }).then(function (response) {
-        var people = (response && response.data && response.data.items) || [];
-        state.staff = people;
-        KSL.fillStaffSelect('newUserStaffMember', people, 'Select staff member', selectedStaffId || '');
-        return people;
+        state.staff = (response && response.data && response.data.items) || [];
+        return state.staff;
       });
     }
 
@@ -230,16 +189,6 @@
         state.viewerIsSuperAdmin ||
           (KSL.state.currentUser && KSL.state.currentUser.isSuperAdmin)
       );
-    }
-
-    function rolesForNewUser(roles) {
-      var list = staffRoleValues(roles);
-      if (!viewerIsSuperAdmin()) {
-        list = list.filter(function (role) {
-          return role !== 'Administrator';
-        });
-      }
-      return list;
     }
 
     function rolesForFilter(roles) {
@@ -474,6 +423,10 @@
           var payload = response.data || {};
           state.users = payload.items || [];
           state.viewerIsSuperAdmin = Boolean(payload.viewerIsSuperAdmin);
+          var newUserButton = document.getElementById('newUserButton');
+          if (newUserButton) {
+            newUserButton.classList.toggle('hidden', !viewerIsSuperAdmin());
+          }
           var pagination = payload.pagination || {};
           state.page = Number(pagination.page || 1);
           state.pages = Number(pagination.pages || 1);
@@ -787,27 +740,19 @@
           });
         });
       }
-      document.getElementById('newUserStaffMember').addEventListener('change', applySelectedStaff);
-      document.getElementById('newUserButton').addEventListener('click', function () {
-        document.getElementById('newUserForm').reset();
-        document.getElementById('newUserStaffUid').value = '';
-        document.getElementById('newUserRole').value = 'Staff';
-        loadStaffSelects('').then(function () {
-          applySelectedStaff();
+      var newUserButton = document.getElementById('newUserButton');
+      if (newUserButton) {
+        newUserButton.classList.toggle('hidden', !viewerIsSuperAdmin());
+        newUserButton.addEventListener('click', function () {
+          document.getElementById('newUserForm').reset();
+          KSL.previewNextId('USR').then(function (nextId) {
+            document.getElementById('newUserIdPreview').value = nextId || 'Generated on save';
+          });
+          KSL.openModal('newUserModalBackdrop');
         });
-        KSL.previewNextId('USR').then(function (nextId) {
-          document.getElementById('newUserIdPreview').value = nextId || 'Generated on save';
-        });
-        KSL.openModal('newUserModalBackdrop');
-      });
+      }
       document.getElementById('newUserForm').addEventListener('submit', function (event) {
         event.preventDefault();
-        var role = document.getElementById('newUserRole').value;
-        var staffId = document.getElementById('newUserStaffMember').value.trim();
-        if (role !== 'Administrator' && !staffId) {
-          KSL.showToast('Select the staff member this login belongs to.', 'error');
-          return;
-        }
         var passwordCheck = KSL.validatePassword(document.getElementById('newUserPassword').value);
         if (!passwordCheck.valid) {
           KSL.showToast(
@@ -821,21 +766,20 @@
           username: document.getElementById('newUserUsername').value.trim(),
           email: document.getElementById('newUserEmail').value.trim(),
           password: document.getElementById('newUserPassword').value,
-          role: role,
-          employeeId: staffId,
+          role: 'Administrator',
           accountStatus: 'Active'
         })
           .then(function (response) {
             if (!response || !response.success) {
-              throw new Error((response && response.message) || 'Unable to create user.');
+              throw new Error((response && response.message) || 'Unable to create administrator.');
             }
-            KSL.showToast('User created. They can sign in now.', 'success');
+            KSL.showToast('Administrator created. They must change the password after signing in.', 'success');
             KSL.closeModal('newUserModalBackdrop');
             state.page = 1;
             loadUsers();
           })
           .catch(function (error) {
-            KSL.showToast(error.message || 'Unable to create user.', 'error');
+            KSL.showToast(error.message || 'Unable to create administrator.', 'error');
           });
       });
     }
@@ -856,7 +800,6 @@
             withoutPendingStatus(values['Account Statuses'] || defaultStatuses),
             'All statuses'
           );
-          renderDropdownOptions('newUserRole', rolesForNewUser(values.Roles || defaultRoles), '');
           if (saved.role) {
             document.getElementById('usersRoleFilter').value = saved.role;
           }

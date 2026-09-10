@@ -453,6 +453,7 @@ function writeAuditLog_(actor, action, moduleName, recordId, description, oldVal
     Timestamp: now
   };
   appendSheetRecord_(sheet, schema.columns, record);
+  notifyAuditChange_(actor, action, moduleName, recordId, description);
 }
 
 function getUserRecordByGoogleSubject_(googleSubjectId) {
@@ -551,6 +552,116 @@ function getCredentialIndexByUserId_() {
 function isValidUsername_(username) {
   var normalized = normalizeUsername_(username);
   return /^[a-z0-9._-]{4,40}$/.test(normalized);
+}
+
+function lettersForUsername_(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
+}
+
+function buildStaffUsernameCandidates_(fullName) {
+  var parts = normalizeString_(fullName)
+    .split(/\s+/)
+    .map(lettersForUsername_)
+    .filter(Boolean);
+  var candidates = [];
+  if (!parts.length) {
+    candidates.push('staff.ksl');
+  } else {
+    var initials = parts
+      .map(function (part) {
+        return part.charAt(0);
+      })
+      .join('');
+    if (initials.length < 2) {
+      initials = (parts[0] || 'staff').substring(0, 3) || 'stf';
+    }
+    candidates.push(initials + '.ksl');
+    var last = parts[parts.length - 1] || '';
+    var restLast = last.substring(1);
+    var i;
+    for (i = 1; i <= restLast.length; i += 1) {
+      candidates.push(initials + restLast.substring(0, i) + '.ksl');
+    }
+    for (i = 2; i <= 99; i += 1) {
+      candidates.push(initials + String(i) + '.ksl');
+    }
+  }
+  return candidates;
+}
+
+function buildUniqueStaffUsername_(fullName) {
+  var taken = {};
+  safeReadSheetRecords_('USER_CREDENTIALS').forEach(function (record) {
+    taken[normalizeUsername_(record.Username)] = true;
+  });
+  var candidates = buildStaffUsernameCandidates_(fullName);
+  var index;
+  for (index = 0; index < candidates.length; index += 1) {
+    var username = normalizeUsername_(candidates[index]);
+    if (isValidUsername_(username) && !taken[username]) {
+      return username;
+    }
+  }
+  return normalizeUsername_('stf' + String(Date.now()).slice(-5) + '.ksl');
+}
+
+function generateTemporaryPassword_() {
+  var upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  var lower = 'abcdefghijkmnpqrstuvwxyz';
+  var numbers = '23456789';
+  function pick_(source) {
+    return source.charAt(Math.floor(Math.random() * source.length));
+  }
+  var chars = [
+    pick_(upper),
+    pick_(upper),
+    pick_(lower),
+    pick_(lower),
+    pick_(lower),
+    pick_(lower),
+    pick_(numbers),
+    pick_(numbers),
+    pick_(upper),
+    pick_(lower)
+  ];
+  var i;
+  for (i = chars.length - 1; i > 0; i -= 1) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var hold = chars[i];
+    chars[i] = chars[j];
+    chars[j] = hold;
+  }
+  return chars.join('');
+}
+
+function credentialMustChangePassword_(credentialRecord) {
+  var raw = credentialRecord ? credentialRecord['Must Change Password'] : '';
+  if (raw === true) {
+    return true;
+  }
+  var value = String(raw || '').trim().toLowerCase();
+  return value === 'true' || value === 'yes' || value === '1';
+}
+
+function setCredentialMustChangePassword_(userId, mustChange) {
+  var credential = getUserCredentialRecordByUserId_(userId);
+  if (!credential) {
+    return;
+  }
+  var schema = resolveSchema_('USER_CREDENTIALS');
+  var sheet = getSheetBySchema_(schema);
+  try {
+    ensureHeaders_(sheet, schema.columns);
+  } catch (error) {
+    // Header already matches or cannot be expanded in this run.
+  }
+  var updated = Object.assign({}, credential);
+  updated['Must Change Password'] = mustChange ? 'TRUE' : 'FALSE';
+  updated['Updated Date'] = new Date();
+  updateSheetRecordByRow_(sheet, credential.__rowNumber, schema.columns, updated);
+  EXECUTION_CREDENTIALS_CACHE_ = null;
 }
 
 function assertValidUsername_(username) {
@@ -692,7 +803,7 @@ function isCredentialCurrentlyLocked_(credentialRecord) {
   return Boolean(lockoutUntil && lockoutUntil.getTime() > Date.now());
 }
 
-function setCredentialPassword_(userId, username, plainPassword, actorId) {
+function setCredentialPassword_(userId, username, plainPassword, actorId, mustChangePassword) {
   var normalizedUserId = normalizeString_(userId);
   var normalizedUsername = normalizeUsername_(username);
   var updatedBy = normalizeString_(actorId || normalizedUserId || 'system');
@@ -704,6 +815,11 @@ function setCredentialPassword_(userId, username, plainPassword, actorId) {
 
   var schema = resolveSchema_('USER_CREDENTIALS');
   var sheet = getSheetBySchema_(schema);
+  try {
+    ensureHeaders_(sheet, schema.columns);
+  } catch (error) {
+    // Continue with the current header row if expansion is blocked.
+  }
   var records = readSheetRecords_(schema);
   var byUserId = records.find(function (record) {
     return normalizeString_(record['User ID']) === normalizedUserId;
@@ -734,6 +850,13 @@ function setCredentialPassword_(userId, username, plainPassword, actorId) {
   record['Failed Attempts'] = 0;
   record['Lockout Until'] = '';
   record['Last Password Change'] = now;
+  if (mustChangePassword === true) {
+    record['Must Change Password'] = 'TRUE';
+  } else if (mustChangePassword === false) {
+    record['Must Change Password'] = 'FALSE';
+  } else if (!byUserId) {
+    record['Must Change Password'] = 'FALSE';
+  }
   record['Updated Date'] = now;
   record['Updated By'] = updatedBy;
 
@@ -748,8 +871,8 @@ function setCredentialPassword_(userId, username, plainPassword, actorId) {
   return record;
 }
 
-function setUserCredential_(userId, username, plainPassword, actorId) {
-  return setCredentialPassword_(userId, username, plainPassword, actorId);
+function setUserCredential_(userId, username, plainPassword, actorId, mustChangePassword) {
+  return setCredentialPassword_(userId, username, plainPassword, actorId, mustChangePassword);
 }
 
 function clearCredentialFailureState_(credentialRecord, actorId) {
@@ -836,7 +959,8 @@ function mapUserRecordToSessionUser_(record) {
     employeeId: normalizeString_(record['Employee ID']),
     department: normalizeString_(record.Department),
     jobTitle: normalizeString_(record['Job Title']),
-    profilePhoto: normalizeString_(record['Profile Photo'])
+    profilePhoto: normalizeString_(record['Profile Photo']),
+    mustChangePassword: credentialMustChangePassword_(credential)
   };
 }
 
@@ -1390,6 +1514,208 @@ function createNotification_(userId, employeeId, type, title, message, relatedTa
   };
   appendSheetRecord_(sheet, schema.columns, record);
   clearUnreadNotificationCache_(userId, employeeId);
+}
+
+function auditNotificationCopy_(action, moduleName, description, recordId) {
+  var modules = {
+    Employees: 'Staff',
+    Users: 'Login account',
+    Tasks: 'Task',
+    TaskAssignments: 'Assignment',
+    Assignments: 'Assignment',
+    TaskSubtasks: 'Subtask',
+    TaskComments: 'Comment',
+    TaskAttachments: 'Attachment',
+    Progress: 'Progress',
+    Departments: 'Department',
+    Teams: 'Team',
+    Settings: 'Setting',
+    Dimensions: 'Dimension',
+    DailyProgress: 'Daily progress',
+    WeeklyProgress: 'Weekly progress',
+    MonthlyProgress: 'Monthly progress',
+    Performance: 'Performance',
+    Reports: 'Report'
+  };
+  var verbs = {
+    CREATE: 'created',
+    UPDATE: 'updated',
+    DELETE: 'deleted',
+    ASSIGN: 'assigned',
+    REASSIGN: 'reassigned',
+    REVIEW: 'reviewed',
+    GENERATE: 'generated',
+    ARCHIVE: 'archived',
+    ACTIVATE: 'activated',
+    DEACTIVATE: 'deactivated',
+    REBUILD: 'rebuilt',
+    PASSWORD_RESET: 'password reset',
+    PASSWORD_CHANGE: 'password changed',
+    REMOVE: 'removed'
+  };
+  var noun = modules[normalizeString_(moduleName)] || normalizeString_(moduleName) || 'Record';
+  var verb = verbs[normalizeString_(action).toUpperCase()] || String(action || 'updated').toLowerCase();
+  var title = noun + ' ' + verb;
+  var message = normalizeString_(description) || title + (recordId ? ' (' + recordId + ')' : '') + '.';
+  return { title: title, message: message };
+}
+
+function notifyAuditChange_(actor, action, moduleName, recordId, description) {
+  var actionKey = normalizeString_(action).toUpperCase();
+  if (actionKey === 'LOGIN' || actionKey === 'LOGOUT') {
+    return;
+  }
+  try {
+    var copy = auditNotificationCopy_(action, moduleName, description, recordId);
+    var relatedTaskId = /^TSK-/i.test(normalizeString_(recordId)) ? normalizeString_(recordId) : '';
+    var seen = {};
+    function addRecipient_(userId, employeeId) {
+      var uid = normalizeString_(userId);
+      var eid = normalizeString_(employeeId);
+      if (!uid && !eid) {
+        return;
+      }
+      var key = uid || 'e:' + eid;
+      if (seen[key]) {
+        if (uid && !seen[key].userId) {
+          seen[key].userId = uid;
+        }
+        if (eid && !seen[key].employeeId) {
+          seen[key].employeeId = eid;
+        }
+        return;
+      }
+      seen[key] = { userId: uid, employeeId: eid };
+    }
+    if (actor) {
+      addRecipient_(actor.userId, actor.employeeId);
+    }
+    safeReadSheetRecords_('USERS').forEach(function (record) {
+      if (normalizeString_(record.Role) !== 'Administrator') {
+        return;
+      }
+      if (!isActiveAccountStatus_(record['Account Status'])) {
+        return;
+      }
+      addRecipient_(record['User ID'], record['Employee ID']);
+    });
+    Object.keys(seen).forEach(function (key) {
+      var recipient = seen[key];
+      createNotification_(
+        recipient.userId,
+        recipient.employeeId,
+        'System',
+        copy.title,
+        copy.message,
+        relatedTaskId,
+        'Medium'
+      );
+    });
+  } catch (error) {
+    // Notifications are best-effort and must not block the saved change.
+  }
+}
+
+function sendStaffLoginEmail_(toEmail, fullName, username, password, scriptUrl) {
+  var email = normalizeEmail_(toEmail);
+  if (!email) {
+    return false;
+  }
+  var appTitle = getAppTitle_();
+  var body = [
+    'Hello ' + (normalizeString_(fullName) || 'colleague') + ',',
+    '',
+    'A login was created for you on the ' + appTitle + '.',
+    '',
+    'Sign-in page: ' + normalizeString_(scriptUrl),
+    'Username: ' + normalizeString_(username),
+    'Temporary password: ' + String(password || ''),
+    '',
+    'You will be asked to set a new password after you sign in. Username cannot be changed.',
+    '',
+    'Kenya Shipyards Limited'
+  ].join('\n');
+  try {
+    MailApp.sendEmail({
+      to: email,
+      subject: appTitle + ' — your sign-in details',
+      body: body
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function provisionStaffLogin_(actor, employeeRecord, plainPassword) {
+  var employeeId = normalizeString_(employeeRecord && employeeRecord['Employee ID']);
+  var fullName = normalizeString_(employeeRecord && employeeRecord['Full Name']);
+  var email = normalizeEmail_(employeeRecord && employeeRecord.Email);
+  if (!employeeId || !fullName) {
+    throw new Error('Staff name is required to create a login.');
+  }
+  if (!email) {
+    throw new Error('Work email is required so the sign-in details can be sent.');
+  }
+  if (findUserByEmployeeId_(employeeId)) {
+    throw new Error('That staff member already has a login account.');
+  }
+  if (getUserRecordByEmail_(email)) {
+    throw new Error('A login with this email already exists.');
+  }
+  var password = String(plainPassword || generateTemporaryPassword_());
+  assertPasswordStrength_(password);
+  var username = buildUniqueStaffUsername_(fullName);
+  var schema = resolveSchema_('USERS');
+  var sheet = getSheetBySchema_(schema);
+  var now = new Date();
+  var names = splitNameParts_(fullName);
+  var userId = generateSequenceId_('USR');
+  var userRecord = {
+    'User ID': userId,
+    'Google Subject ID': '',
+    'Google Email': email,
+    'Email Verified': 'FALSE',
+    'Full Name': fullName,
+    'Given Name': names.givenName,
+    'Family Name': names.familyName,
+    'Profile Photo': '',
+    'Hosted Domain': '',
+    'Employee ID': employeeId,
+    Department: normalizeString_(employeeRecord.Department),
+    'Job Title': normalizeString_(employeeRecord['Job Title']),
+    Role: 'Staff',
+    'Supervisor ID': normalizeString_(employeeRecord['Supervisor ID']),
+    'Account Status': 'Active',
+    'First Login': '',
+    'Last Login': '',
+    'Last Activity': '',
+    'Created By': actor && actor.userId ? actor.userId : '',
+    'Created Date': now,
+    'Updated By': actor && actor.userId ? actor.userId : '',
+    'Updated Date': now
+  };
+  appendSheetRecord_(sheet, schema.columns, userRecord);
+  setUserCredential_(userId, username, password, actor && actor.userId, true);
+  EXECUTION_USERS_CACHE_ = null;
+  EXECUTION_CREDENTIALS_CACHE_ = null;
+  var scriptUrl = toShareableWebAppUrl_(getScriptUrl());
+  var emailSent = sendStaffLoginEmail_(email, fullName, username, password, scriptUrl);
+  writeAuditLog_(
+    actor,
+    'CREATE',
+    'Users',
+    userId,
+    'Staff login created for ' + fullName + ' (' + username + ').',
+    '',
+    { username: username, role: 'Staff', emailSent: emailSent }
+  );
+  return {
+    userId: userId,
+    username: username,
+    emailSent: emailSent,
+    temporaryPassword: emailSent ? '' : password
+  };
 }
 
 function findEmployeeByEmail_(email) {
