@@ -223,7 +223,7 @@
 
     function tryAutoRedirectForExistingSession() {
       // Editor preview URLs cannot route app pages correctly.
-      if (!KSL.getScriptUrl() || KSL.isEditorPreviewUrl()) {
+      if (!KSL.getScriptUrl()) {
         return;
       }
       var reloginParam = String(KSL.readQueryParam('relogin') || '').toLowerCase();

@@ -25,8 +25,12 @@
     };
 
     KSL.isEditorPreviewUrl = function () {
+      var scriptUrl = KSL.getScriptUrl();
+      if (/\/macros\/s\/[^/]+\/exec/i.test(scriptUrl)) {
+        return false;
+      }
       var href = String(window.location.href || '');
-      return /userCodeAppPanel/i.test(href);
+      return /\/dev\/?(\?|$)/i.test(scriptUrl) || /\/dev\/?(\?|$)/i.test(href);
     };
 
     KSL.resolveNavigationBaseUrl = function () {
@@ -289,10 +293,6 @@
     };
 
     KSL.navigate = function (page, extraQuery) {
-      if (KSL.isEditorPreviewUrl()) {
-        KSL.showToast('Open the deployed web app link ending with /exec to move between pages.', 'error');
-        return;
-      }
       var params = new URLSearchParams();
       if (page) {
         params.set('page', page);
@@ -322,16 +322,12 @@
         );
         return;
       }
-      var nextUrl = baseUrl + nextSearch;
+      var nextUrl = baseUrl.replace(/\/$/, '') + nextSearch;
       try {
-        if (window.top && window.top.location) {
-          window.top.location.assign(nextUrl);
-          return;
-        }
+        window.open(nextUrl, '_top');
       } catch (error) {
-        // Fall through to same-frame navigation.
+        window.location.href = nextUrl;
       }
-      window.location.href = nextUrl;
     };
 
     KSL.applyShellContext = function (bootstrapData) {
