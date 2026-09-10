@@ -810,12 +810,12 @@ function getPerformanceSettingSeedRows_(updatedDate, updatedBy) {
     ['GRADE_EXCELLENT_MIN', '85', 'Performance', 'Number', 'Minimum overall score for Excellent.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['GRADE_GOOD_MIN', '70', 'Performance', 'Number', 'Minimum overall score for Good.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['GRADE_SATISFACTORY_MIN', '55', 'Performance', 'Number', 'Minimum overall score for Satisfactory.', 'TRUE', 'Active', updatedDate, updatedBy],
-    ['DEFAULT_PAGE_SIZE', '25', 'Interface', 'Number', 'Default pagination page size.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['REPORT_ORG_NAME', 'Kenya Shipyards Limited', 'Reports', 'Text', 'Organization name used on printed and PDF reports.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['MAX_ATTACHMENT_MB', '8', 'Workflow', 'Number', 'Maximum attachment size in megabytes.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['MAX_SUBTASK_PDF_MB', '2', 'Workflow', 'Number', 'Maximum PDF size in megabytes for subtask evidence.', 'TRUE', 'Active', updatedDate, updatedBy],
     ['REQUIRE_DELAY_REASON', 'TRUE', 'Workflow', 'Boolean', 'Require a delay reason when a task is delayed or overdue.', 'TRUE', 'Active', updatedDate, updatedBy],
-    ['REQUIRE_BLOCKER_DESCRIPTION', 'TRUE', 'Workflow', 'Boolean', 'Require a blocker description when a task is blocked.', 'TRUE', 'Active', updatedDate, updatedBy]
+    ['REQUIRE_BLOCKER_DESCRIPTION', 'TRUE', 'Workflow', 'Boolean', 'Require a blocker description when a task is blocked.', 'TRUE', 'Active', updatedDate, updatedBy],
+    ['SUPER_ADMIN_USER_ID', '', 'Security', 'Text', 'Permanent Super Admin user ID.', 'FALSE', 'Active', updatedDate, updatedBy]
   ];
 }
 
@@ -857,7 +857,7 @@ function getDimensionSeedMap_() {
     'Performance Ratings': ['Excellent', 'Good', 'Satisfactory', 'Needs Improvement'],
     'Notification Types': ['Assignment', 'Due Soon', 'Overdue', 'Progress Review', 'Account'],
     Roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff'],
-    'Account Statuses': ['Pending Approval', 'Active', 'Suspended', 'Disabled']
+    'Account Statuses': ['Active', 'Suspended', 'Disabled']
   };
 }
 
@@ -911,6 +911,7 @@ function bootstrapFirstAdminByEmail(firstAdminInput) {
     updated['Updated Date'] = now;
 
     updateSheetRecordByRow_(sheet, existingByEmail.__rowNumber, schema.columns, updated);
+    ensureSuperAdminAssigned_(updated['User ID']);
 
     return {
       success: true,
@@ -949,6 +950,7 @@ function bootstrapFirstAdminByEmail(firstAdminInput) {
   };
 
   appendSheetRecord_(sheet, schema.columns, record);
+  ensureSuperAdminAssigned_(userId);
 
   return {
     success: true,

@@ -349,12 +349,20 @@
           if (!button) {
             return;
           }
-          var comment = window.prompt('Review comment (optional):', '') || '';
-          KSL.call('reviewProgressUpdate', KSL.getSessionToken(), {
-            updateId: button.dataset.id,
-            decision: button.dataset.decision,
-            comment: comment
-          })
+          KSL.promptModal({
+            title: 'Review comment',
+            message: 'Optional comment for this decision.',
+            label: 'Comment',
+            defaultValue: ''
+          }).then(function (comment) {
+            if (comment === null) {
+              return;
+            }
+            KSL.call('reviewProgressUpdate', KSL.getSessionToken(), {
+              updateId: button.dataset.id,
+              decision: button.dataset.decision,
+              comment: comment
+            })
             .then(function (response) {
               if (!response || !response.success) {
                 throw new Error((response && response.message) || 'Review failed.');
@@ -366,6 +374,7 @@
             .catch(function (error) {
               KSL.showToast(error.message || 'Review failed.', 'error');
             });
+          });
         });
         loadProgress();
       });

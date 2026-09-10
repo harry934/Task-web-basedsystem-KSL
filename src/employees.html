@@ -75,7 +75,18 @@
         </div>
         <div class="field">
           <label for="employeePhoneInput">Phone</label>
-          <input id="employeePhoneInput" class="input" type="text">
+          <div class="phone-input">
+            <span class="phone-prefix" aria-hidden="true">+254</span>
+            <input
+              id="employeePhoneInput"
+              class="input"
+              type="tel"
+              inputmode="numeric"
+              maxlength="9"
+              autocomplete="tel-national"
+              placeholder="712345678"
+            >
+          </div>
         </div>
         <div class="field">
           <label for="employeeDepartmentInput">Department</label>
@@ -98,8 +109,8 @@
           <select id="employeeSectionInput" class="select"></select>
         </div>
         <div class="field">
-          <label for="employeeTeamInput">Team</label>
-          <input id="employeeTeamInput" class="input" type="text">
+          <label for="employeeTeamInput">Team (optional)</label>
+          <select id="employeeTeamInput" class="select"></select>
         </div>
         <div class="field">
           <label for="employeeSupervisorIdInput">Supervisor</label>
@@ -135,15 +146,49 @@
       meta: {}
     };
 
-    function fillSelect(id, values, placeholder) {
+    function fillSelect(id, values, placeholder, selectedValue) {
       var select = document.getElementById(id);
+      var list = (values || []).slice();
+      var selected = String(selectedValue || '');
+      if (selected && list.indexOf(selected) === -1) {
+        list.unshift(selected);
+      }
       var html = placeholder ? '<option value="">' + KSL.escapeHtml(placeholder) + '</option>' : '';
-      html += (values || [])
+      html += list
         .map(function (value) {
           return '<option value="' + KSL.escapeHtml(value) + '">' + KSL.escapeHtml(value) + '</option>';
         })
         .join('');
       select.innerHTML = html;
+      if (selected) {
+        select.value = selected;
+      }
+    }
+
+    function nationalPhoneDigits(value) {
+      var digits = String(value || '').replace(/\D/g, '');
+      if (digits.indexOf('254') === 0) {
+        digits = digits.substring(3);
+      }
+      if (digits.charAt(0) === '0') {
+        digits = digits.substring(1);
+      }
+      return digits.slice(0, 9);
+    }
+
+    function setPhoneInput(value) {
+      document.getElementById('employeePhoneInput').value = nationalPhoneDigits(value);
+    }
+
+    function collectPhone() {
+      var digits = nationalPhoneDigits(document.getElementById('employeePhoneInput').value);
+      if (!digits) {
+        return '';
+      }
+      if (digits.length !== 9) {
+        throw new Error('Phone must be 9 digits after +254, for example 712345678.');
+      }
+      return '+254' + digits;
     }
 
     function getFilters() {
@@ -233,7 +278,15 @@
     }
 
     function loadEmployees() {
-      KSL.call('listEmployees', KSL.getSessionToken(), getFilters())
+      var filters = getFilters();
+      KSL.replaceFiltersInUrl({
+        query: filters.query,
+        department: filters.department,
+        supervisor: filters.supervisor,
+        status: filters.status,
+        page: filters.page > 1 ? filters.page : ''
+      });
+      KSL.call('listEmployees', KSL.getSessionToken(), filters)
         .then(function (response) {
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Failed to load employees.');
@@ -255,6 +308,8 @@
       document.getElementById('employeeIdInput').value = '';
       document.getElementById('employeeModalTitle').textContent = 'New staff';
       document.getElementById('employeeStatusInput').value = 'Active';
+      setPhoneInput('');
+      fillSelect('employeeTeamInput', state.meta.teams || [], 'None (optional)');
       KSL.fillStaffSelect('employeeSupervisorIdInput', state.meta.staff || [], 'Select supervisor');
       KSL.previewNextId('EMP').then(function (nextId) {
         document.getElementById('employeeNumberInput').value = nextId || 'Generated on save';
@@ -275,13 +330,13 @@
       document.getElementById('employeeFullNameInput').value = item.fullName || '';
       document.getElementById('employeeNumberInput').value = item.employeeId || item.employeeNumber || '';
       document.getElementById('employeeEmailInput').value = item.email || '';
-      document.getElementById('employeePhoneInput').value = item.phone || '';
+      setPhoneInput(item.phone || '');
       document.getElementById('employeeDepartmentInput').value = item.department || '';
       document.getElementById('employeeJobTitleInput').value = item.jobTitle || '';
       document.getElementById('employeeTypeInput').value = item.employmentType || '';
       document.getElementById('employeeLocationInput').value = item.workLocation || '';
       document.getElementById('employeeSectionInput').value = item.section || '';
-      document.getElementById('employeeTeamInput').value = item.team || '';
+      fillSelect('employeeTeamInput', state.meta.teams || [], 'None (optional)', item.team || '');
       KSL.fillStaffSelect(
         'employeeSupervisorIdInput',
         state.meta.staff || [],
@@ -307,7 +362,7 @@
         fullName: document.getElementById('employeeFullNameInput').value.trim(),
         employeeNumber: document.getElementById('employeeNumberInput').value.trim(),
         email: document.getElementById('employeeEmailInput').value.trim(),
-        phone: document.getElementById('employeePhoneInput').value.trim(),
+        phone: collectPhone(),
         department: document.getElementById('employeeDepartmentInput').value,
         jobTitle: document.getElementById('employeeJobTitleInput').value,
         employmentType: document.getElementById('employeeTypeInput').value,
@@ -335,6 +390,7 @@
             fillSelect('employeeTypeInput', state.meta.employmentTypes || [], 'Select type');
             fillSelect('employeeLocationInput', state.meta.workLocations || [], 'Select location');
             fillSelect('employeeSectionInput', state.meta.sections || [], 'Select section');
+            fillSelect('employeeTeamInput', state.meta.teams || [], 'None (optional)');
             KSL.fillStaffSelect('employeeSupervisorIdInput', state.meta.staff || [], 'Select supervisor');
           })
           .catch(function () {
@@ -389,7 +445,7 @@
               if (!response || !response.success) {
                 throw new Error((response && response.message) || 'Export failed.');
               }
-              KSL.downloadFile(response.data);
+              KSL.previewOrDownloadFile(response.data);
               KSL.showToast('Export ready.', 'success');
             })
             .catch(function (error) {
@@ -404,7 +460,7 @@
               if (!response || !response.success) {
                 throw new Error((response && response.message) || 'Export failed.');
               }
-              KSL.downloadFile(response.data);
+              KSL.previewOrDownloadFile(response.data);
               KSL.showToast('Report generated.', 'success');
             })
             .catch(function (error) {
@@ -422,40 +478,73 @@
             return;
           }
           if (button.dataset.action === 'delete') {
-            if (!KSL.confirmDelete(button.dataset.name || id)) {
-              return;
-            }
-            KSL.call('deleteEmployee', KSL.getSessionToken(), { employeeId: id })
-              .then(function (response) {
-                if (!response || !response.success) {
-                  throw new Error((response && response.message) || 'Delete failed.');
-                }
-                KSL.showToast('Staff record deleted.', 'success');
-                loadEmployees();
-              })
-              .catch(function (error) {
-                KSL.showToast(error.message || 'Delete failed.', 'error');
-              });
-            return;
-          }
-          if (!window.confirm('Deactivate this staff member? They will no longer appear in assignment lists.')) {
-            return;
-          }
-          KSL.call('deactivateEmployee', KSL.getSessionToken(), { employeeId: id })
-            .then(function (response) {
-              if (!response || !response.success) {
-                throw new Error((response && response.message) || 'Deactivate failed.');
+            KSL.confirmDelete(button.dataset.name || id).then(function (ok) {
+              if (!ok) {
+                return;
               }
-              KSL.showToast('Staff member deactivated.', 'success');
-              loadEmployees();
-            })
-            .catch(function (error) {
-              KSL.showToast(error.message || 'Deactivate failed.', 'error');
+              var removed = state.items.filter(function (item) {
+                return item.employeeId === id;
+              })[0];
+              state.items = state.items.filter(function (item) {
+                return item.employeeId !== id;
+              });
+              renderTable();
+              KSL.scheduleAction({
+                message: 'Staff record will be deleted. Undo?',
+                delayMs: 5000,
+                run: function () {
+                  return KSL.call('deleteEmployee', KSL.getSessionToken(), { employeeId: id }).then(function (response) {
+                    if (!response || !response.success) {
+                      throw new Error((response && response.message) || 'Delete failed.');
+                    }
+                    KSL.showToast('Staff record deleted.', 'success');
+                  });
+                },
+                onUndo: function () {
+                  if (removed) {
+                    state.items.unshift(removed);
+                    renderTable();
+                  }
+                  KSL.showToast('Delete cancelled.', 'info');
+                }
+              });
             });
+            return;
+          }
+          if (button.dataset.action === 'deactivate') {
+            KSL.confirmModal({
+              title: 'Deactivate staff',
+              message: 'Deactivate this staff member? They will no longer appear in assignment lists.'
+            }).then(function (ok) {
+              if (!ok) {
+                return;
+              }
+              KSL.call('deactivateEmployee', KSL.getSessionToken(), { employeeId: id })
+                .then(function (response) {
+                  if (!response || !response.success) {
+                    throw new Error((response && response.message) || 'Deactivate failed.');
+                  }
+                  KSL.showToast('Staff member deactivated.', 'success');
+                  loadEmployees();
+                })
+                .catch(function (error) {
+                  KSL.showToast(error.message || 'Deactivate failed.', 'error');
+                });
+            });
+          }
+        });
+        document.getElementById('employeePhoneInput').addEventListener('input', function (event) {
+          event.target.value = nationalPhoneDigits(event.target.value);
         });
         document.getElementById('employeeForm').addEventListener('submit', function (event) {
           event.preventDefault();
-          var payload = collectPayload();
+          var payload;
+          try {
+            payload = collectPayload();
+          } catch (error) {
+            KSL.showToast(error.message || 'Check the staff form and try again.', 'error');
+            return;
+          }
           var fn = payload.employeeId ? 'updateEmployee' : 'createEmployee';
           KSL.call(fn, KSL.getSessionToken(), payload)
             .then(function (response) {
@@ -470,6 +559,12 @@
             .catch(function (error) {
               KSL.showToast(error.message || 'Save failed.', 'error');
             });
+        });
+        KSL.applyFiltersFromUrl({
+          query: 'employeesSearchInput',
+          department: 'employeesDepartmentFilter',
+          supervisor: 'employeesSupervisorFilter',
+          status: 'employeesStatusFilter'
         });
         loadEmployees();
       });

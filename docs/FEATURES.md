@@ -4,7 +4,10 @@ This is the web app for planning, assigning, tracking, and reviewing work at Ken
 
 There is **one Sign in page for everyone** — Administrator, Manager, Supervisor, Team Leader, and Staff. After an administrator creates a staff person and issues them a username, that staff member uses the **same** Sign in page as the admin. There is no separate staff login and no public sign-up.
 
-Live app: `https://script.google.com/macros/s/AKfycbzn34cAzmEzRipA4Y2omX8psx4O0OPEWpOoufIkMqK2Mp-bz7I2Tz-yicHosAoRj3f2Pw/exec`
+Live app (use this in email and other browsers):  
+`https://script.google.com/a/*/macros/s/AKfycbzn34cAzmEzRipA4Y2omX8psx4O0OPEWpOoufIkMqK2Mp-bz7I2Tz-yicHosAoRj3f2Pw/exec`
+
+Share only that `/exec` web app URL. A Google Sheet, Drive, Apps Script editor, `/dev`, or `usercontent.com` link is not the app and shows Drive’s “Sorry, unable to open the file at present” page. Recipients signed into more than one Google account should open the link in a private/incognito window.
 
 ## How to sign in
 
@@ -17,7 +20,7 @@ The Sign in page is shared. Admin and staff both open the same `/exec` link.
 
 **Staff (after the admin has created them)**
 1. Admin creates the person on **Staff**.
-2. Admin creates their login on **Users** (username, password, role Staff, linked Staff UID).
+2. Admin creates their login on **Users** (username, password, role). Pick the **staff member by name**. Staff UID and Login UID are generated automatically. The account is active immediately — there is no approval queue.
 3. That staff member opens the **same** Sign in page, enters their username and password, and lands on the staff dashboard (Dashboard, My Tasks, Progress, Notifications).
 
 Guessing a page in the URL (for example `?page=progress`) without signing in sends you back to Sign in with: **You are not allowed to open that page. Sign in first.**
@@ -71,7 +74,7 @@ Everything Staff can do, plus:
 - Monitor overdue, due soon, and blocked work.
 - Generate daily / weekly / monthly snapshots, reports, and performance scores.
 - Search any staff member’s tasks and subtasks from the dashboard (and Monitoring).
-- Create login accounts, reset passwords, approve or disable users.
+- Create login accounts, reset passwords, activate, suspend, or disable users.
 - Change Settings, dimension lists, backup, and **Rebuild Config**.
 - Read the **Audit log**.
 
@@ -80,7 +83,7 @@ Typical setup order:
 1. Settings → Rebuild Config (if sheets are missing).
 2. Departments and Teams.
 3. Staff records (this creates the Staff UID).
-4. Users → New User (username, password, role, linked Staff UID).
+4. Users → New User (pick the staff member by name, then username and password). The account can sign in immediately.
 5. Tasks with subtasks → Assignments.
 
 ---
@@ -138,6 +141,10 @@ Operational flags: overdue, due soon, blocked, in progress. Staff lookup is avai
 
 Organisation records. Create staff **before** creating a login. Archive is blocked when the record is still used by active tasks.
 
+Settings → Dimensions lists **names only**. The Departments and Teams pages need actual records (ID, head/leader, status). If those pages are empty, use **Import from Dimensions**.
+
+PDF Export opens a preview first; then Download. Deletes ask for confirmation and can be undone for a few seconds.
+
 ### Daily / Weekly / Monthly Progress
 
 Snapshot reports generated from live tasks, then reviewed and exported. Supervisor and above.
@@ -160,15 +167,17 @@ Read-only history of sign-ins, creates, updates, deletes, and reviews. Administr
 
 ### Users (Administrator only)
 
-- New User: username, password, role, linked staff.
-- Approval queue, disable/enable, reset password, delete.
-- Roles: Administrator, Manager, Supervisor, Team Leader, Staff.
+- New User: pick the staff member by name, then username, password, and role. Staff UID and Login UID are automatic. The account is Active immediately.
+- The first Administrator is the **Super Admin**. That account is permanent: nobody can edit, suspend, or delete it, including the Super Admin themselves.
+- Only the Super Admin can create another Administrator, promote someone to Administrator, demote a normal Administrator, or **transfer ownership** (Make Super Admin).
+- A normal Administrator can manage Manager / Supervisor / Team Leader / Staff accounts only.
+- Activate, suspend, disable, reset password, and delete apply to other non-permanent accounts.
+- No approval queue — the administrator creates both the staff record and the login.
+- Roles: Super Admin (one owner), Administrator, Manager, Supervisor, Team Leader, Staff.
 
 ### Settings (Administrator only)
 
-- App title, due-soon days, assignment acceptance, completion rules, PDF size limit, performance weights.
-- Dimensions (priorities, statuses, categories, and similar lists).
-- Backup and **Rebuild Config** (creates missing sheets such as TaskSubtasks and extra TaskUpdates file columns).
+Labeled groups for application title, date format, due-soon days, workflow rules, performance weights, table page size, and sign-in limits. Use **Save Settings**, **Dimensions**, **Backup**, **Rebuild Config**, **Refresh**, and **Clear**. Rebuild Config creates missing sheets and default settings; it does not delete data.
 
 ---
 

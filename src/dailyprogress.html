@@ -81,7 +81,7 @@
       options.format = format;
       KSL.callBusy('exportDailyProgress', KSL.getSessionToken(), options).then(function (response) {
         if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
-        KSL.downloadFile(response.data);
+        KSL.previewOrDownloadFile(response.data);
         KSL.showToast('Report generated.', 'success');
       }).catch(function (error) { KSL.showToast(error.message || 'Export failed.', 'error'); });
     }
@@ -108,13 +108,21 @@
         document.getElementById('dailyTableBody').addEventListener('click', function (event) {
           var button = event.target.closest('button[data-id]');
           if (!button) return;
-          var remarks = window.prompt('Supervisor remarks:', '') || '';
-          KSL.call('reviewDailyProgress', KSL.getSessionToken(), { recordId: button.dataset.id, remarks: remarks })
+          KSL.promptModal({
+            title: 'Supervisor remarks',
+            label: 'Remarks',
+            defaultValue: ''
+          }).then(function (remarks) {
+            if (remarks === null) {
+              return;
+            }
+            KSL.call('reviewDailyProgress', KSL.getSessionToken(), { recordId: button.dataset.id, remarks: remarks || '' })
             .then(function (response) {
               if (!response || !response.success) throw new Error((response && response.message) || 'Review failed.');
               KSL.showToast('Review saved.', 'success');
               load();
             }).catch(function (error) { KSL.showToast(error.message || 'Review failed.', 'error'); });
+          });
         });
         load();
       });

@@ -135,7 +135,7 @@
       options.format = format;
       KSL.callBusy('exportDashboard', KSL.getSessionToken(), options).then(function (response) {
         if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
-        KSL.downloadFile(response.data);
+        KSL.previewOrDownloadFile(response.data);
         KSL.showToast('Report generated.', 'success');
       }).catch(function (error) {
         KSL.showToast(error.message || 'Export failed.', 'error');

@@ -7,8 +7,35 @@ function createUserAccount(sessionToken, payload) {
     var email = normalizeEmail_(input.email);
     var password = String(input.password || '');
     var role = normalizeStoredRole_(input.role || 'Staff');
-    if (!username || !fullName || !password) {
-      throw new Error('Username, full name and password are required.');
+    var employeeId = normalizeString_(input.employeeId);
+    if (!username || !password) {
+      throw new Error('Username and password are required.');
+    }
+    if (role === 'Administrator' && !isSuperAdminUser_(authContext.user.userId)) {
+      throw new Error('Only the Super Admin can create another administrator.');
+    }
+    if (role !== 'Administrator' && !employeeId) {
+      throw new Error('Select the staff member this login belongs to. Create them on the Staff page first.');
+    }
+    var staffRecord = null;
+    if (employeeId) {
+      staffRecord = findEmployeeRecordById_(employeeId);
+      if (!staffRecord) {
+        throw new Error('That staff member was not found. Create them on the Staff page first.');
+      }
+      var linkedUser = findUserByEmployeeId_(employeeId);
+      if (linkedUser) {
+        throw new Error('That staff member already has a login account.');
+      }
+      if (!fullName) {
+        fullName = normalizeString_(staffRecord['Full Name']);
+      }
+      if (!email) {
+        email = normalizeEmail_(staffRecord.Email);
+      }
+    }
+    if (!fullName) {
+      throw new Error('Full name is required.');
     }
     assertValidUsername_(username);
     assertPasswordStrength_(password);
@@ -17,6 +44,20 @@ function createUserAccount(sessionToken, payload) {
     }
     if (email && getUserRecordByEmail_(email)) {
       throw new Error('A user with this email already exists.');
+    }
+    var department = normalizeString_(input.department);
+    var jobTitle = normalizeString_(input.jobTitle);
+    var supervisorId = normalizeString_(input.supervisorId);
+    if (staffRecord) {
+      if (!department) {
+        department = normalizeString_(staffRecord.Department);
+      }
+      if (!jobTitle) {
+        jobTitle = normalizeString_(staffRecord['Job Title']);
+      }
+      if (!supervisorId) {
+        supervisorId = normalizeString_(staffRecord['Supervisor ID']);
+      }
     }
     var schema = resolveSchema_('USERS');
     var sheet = getSheetBySchema_(schema);
@@ -33,12 +74,12 @@ function createUserAccount(sessionToken, payload) {
       'Family Name': names.familyName,
       'Profile Photo': '',
       'Hosted Domain': '',
-      'Employee ID': normalizeString_(input.employeeId),
-      Department: normalizeString_(input.department),
-      'Job Title': normalizeString_(input.jobTitle),
+      'Employee ID': employeeId,
+      Department: department,
+      'Job Title': jobTitle,
       Role: role,
-      'Supervisor ID': normalizeString_(input.supervisorId),
-      'Account Status': normalizeString_(input.accountStatus || 'Active'),
+      'Supervisor ID': supervisorId,
+      'Account Status': 'Active',
       'First Login': '',
       'Last Login': '',
       'Last Activity': '',
@@ -49,9 +90,8 @@ function createUserAccount(sessionToken, payload) {
     };
     appendSheetRecord_(sheet, schema.columns, userRecord);
     setUserCredential_(userId, username, password, authContext.user.userId);
-    if (userRecord['Employee ID']) {
-      upsertEmployeeFromUser_(userRecord);
-    }
+    EXECUTION_USERS_CACHE_ = null;
+    EXECUTION_CREDENTIALS_CACHE_ = null;
     writeAuditLog_(authContext.user, 'CREATE', 'Users', userId, 'Administrator created a user account.', '', {
       username: username,
       role: role,
@@ -65,7 +105,8 @@ function createUserAccount(sessionToken, payload) {
 
 function listUsers(sessionToken, options) {
   try {
-    requireSession_(sessionToken, ['Administrator'], 'users');
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'users');
+    ensureSuperAdminAssigned_(authContext.user.userId);
     var filters = options || {};
     var query = normalizeString_(filters.query).toLowerCase();
     var roleFilter = normalizeString_(filters.role).toLowerCase();
@@ -88,7 +129,9 @@ function listUsers(sessionToken, options) {
           record['Google Email'],
           record['Employee ID'],
           record['Department'],
-          record['Job Title']
+          record['Job Title'],
+          record.Role,
+          isSuperAdminUser_(userId) ? 'super admin' : ''
         ]
           .join(' ')
           .toLowerCase();
@@ -99,7 +142,11 @@ function listUsers(sessionToken, options) {
         if (statusFilter && status !== statusFilter) {
           return false;
         }
-        if (roleFilter && role !== roleFilter) {
+        if (roleFilter === 'super admin') {
+          if (!isSuperAdminUser_(userId)) {
+            return false;
+          }
+        } else if (roleFilter && role !== roleFilter) {
           return false;
         }
         if (departmentFilter && normalizeString_(record.Department).toLowerCase() !== departmentFilter) {
@@ -112,13 +159,16 @@ function listUsers(sessionToken, options) {
       })
       .map(function (record) {
         var userId = normalizeString_(record['User ID']);
-        return mapUserForListResponse_(record, credentialsByUserId[userId] || {});
+        return mapUserForListResponse_(record, credentialsByUserId[userId] || {}, authContext.user);
       })
       .sort(function (a, b) {
         return new Date(b.updatedDate || 0).getTime() - new Date(a.updatedDate || 0).getTime();
       });
 
-    return successResponse_('Users loaded successfully.', buildPagedResult_(users, page, pageSize));
+    var result = buildPagedResult_(users, page, pageSize);
+    result.viewerIsSuperAdmin = isSuperAdminUser_(authContext.user.userId);
+    result.viewerUserId = authContext.user.userId;
+    return successResponse_('Users loaded successfully.', result);
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load users.');
   }
@@ -133,95 +183,11 @@ function listPendingUsers(sessionToken) {
 }
 
 function approveUser(sessionToken, payload) {
-  try {
-    var authContext = requireSession_(sessionToken, ['Administrator'], 'users');
-    var input = payload || {};
-    var userId = normalizeString_(input.userId);
-    if (!userId) {
-      throw new Error('userId is required.');
-    }
-
-    var schema = resolveSchema_('USERS');
-    var usersSheet = getSheetBySchema_(schema);
-    var users = readSheetRecords_(schema);
-    var targetUser = users.find(function (record) {
-      return normalizeString_(record['User ID']) === userId;
-    });
-
-    if (!targetUser) {
-      throw new Error('User was not found.');
-    }
-
-    var role = normalizeString_(input.role);
-    var employeeId = normalizeString_(input.employeeId);
-    var department = normalizeString_(input.department);
-    var jobTitle = normalizeString_(input.jobTitle);
-    if (!employeeId) {
-      throw new Error('Employee ID is required for approval.');
-    }
-    if (!department) {
-      throw new Error('Department is required for approval.');
-    }
-    if (!jobTitle) {
-      throw new Error('Job Title is required for approval.');
-    }
-    if (!role) {
-      throw new Error('Role is required.');
-    }
-
-    var allowedRoles = getDimensionValues_('Roles');
-    if (allowedRoles.length > 0 && allowedRoles.indexOf(role) === -1) {
-      throw new Error('Role must match an active Dimensions value.');
-    }
-
-    var employeeIdInUse = users.some(function (record) {
-      var sameEmployeeId = normalizeString_(record['Employee ID']) === employeeId;
-      var sameUser = normalizeString_(record['User ID']) === userId;
-      return sameEmployeeId && !sameUser;
-    });
-    if (employeeIdInUse) {
-      throw new Error('Employee ID is already assigned to another user.');
-    }
-
-    var updated = Object.assign({}, targetUser);
-    var previous = mapUserForListResponse_(targetUser);
-
-    updated['Employee ID'] = employeeId;
-    updated.Department = department;
-    updated['Job Title'] = jobTitle;
-    updated.Role = role;
-    updated['Supervisor ID'] = normalizeString_(input.supervisorId);
-    updated['Account Status'] = normalizeString_(input.accountStatus || 'Active');
-    updated['Updated Date'] = new Date();
-    updated['Updated By'] = authContext.user.userId;
-
-    if (!updated['Account Status']) {
-      updated['Account Status'] = 'Active';
-    }
-    if (!isActiveAccountStatus_(updated['Account Status'])) {
-      throw new Error('Approval must set account status to Active.');
-    }
-
-    updateSheetRecordByRow_(usersSheet, targetUser.__rowNumber, schema.columns, updated);
-    upsertEmployeeFromUser_(updated);
-
-    writeAuditLog_(
-      authContext.user,
-      'APPROVE',
-      'Users',
-      userId,
-      'Approved user account and assigned role metadata.',
-      previous,
-      mapUserForListResponse_(updated)
-    );
-
-    return successResponse_('User approved successfully.', {
-      userId: userId,
-      accountStatus: updated['Account Status']
-    });
-  } catch (error) {
-    return errorResponse_(error.message || 'Failed to approve user.');
-  }
+  return updateUserAccountStatus(sessionToken, {
+    userId: payload && payload.userId,
+    accountStatus: 'Active',
+    reason: 'Account activated by administrator.'
+  });
 }
 
 function updateUserAccountStatus(sessionToken, payload) {
@@ -241,6 +207,9 @@ function updateUserAccountStatus(sessionToken, payload) {
     if (normalizeString_(authContext.user.userId) === userId) {
       throw new Error('You cannot change your own account status.');
     }
+    if (isSuperAdminUser_(userId)) {
+      throw new Error('The Super Admin account is permanent and cannot be suspended or disabled.');
+    }
 
     var schema = resolveSchema_('USERS');
     var usersSheet = getSheetBySchema_(schema);
@@ -251,6 +220,12 @@ function updateUserAccountStatus(sessionToken, payload) {
 
     if (!targetUser) {
       throw new Error('User was not found.');
+    }
+    if (
+      normalizeString_(targetUser.Role) === 'Administrator' &&
+      !isSuperAdminUser_(authContext.user.userId)
+    ) {
+      throw new Error('Only the Super Admin can change another administrator’s status.');
     }
 
     var previousStatus = normalizeString_(targetUser['Account Status']);
@@ -286,6 +261,42 @@ function updateUserAccountStatus(sessionToken, payload) {
   }
 }
 
+function bulkUpdateUserAccountStatus(sessionToken, payload) {
+  try {
+    requireSession_(sessionToken, ['Administrator'], 'users');
+    var userIds = (payload && payload.userIds) || [];
+    var status = normalizeString_(payload && payload.accountStatus);
+    if (!userIds.length || !status) {
+      throw new Error('Select at least one user and a status.');
+    }
+    var updated = [];
+    var failed = [];
+    userIds.forEach(function (userId) {
+      var result = updateUserAccountStatus(sessionToken, {
+        userId: userId,
+        accountStatus: status
+      });
+      if (result && result.success) {
+        updated.push(normalizeString_(userId));
+      } else {
+        failed.push({
+          userId: normalizeString_(userId),
+          message: (result && result.message) || 'Update failed.'
+        });
+      }
+    });
+    var message = updated.length
+      ? 'Updated ' + updated.length + ' account' + (updated.length === 1 ? '' : 's') + '.'
+      : 'No accounts were updated.';
+    if (failed.length) {
+      message += ' ' + failed.length + ' skipped.';
+    }
+    return successResponse_(message, { updated: updated, failed: failed });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to update selected accounts.');
+  }
+}
+
 function adminResetUserPassword(sessionToken, payload) {
   try {
     var authContext = requireSession_(sessionToken, ['Administrator'], 'users');
@@ -297,6 +308,12 @@ function adminResetUserPassword(sessionToken, payload) {
     if (!userId) {
       throw new Error('userId is required.');
     }
+    if (normalizeString_(authContext.user.userId) === userId) {
+      throw new Error('You cannot change your own password from this page.');
+    }
+    if (isSuperAdminUser_(userId) && !isSuperAdminUser_(authContext.user.userId)) {
+      throw new Error('Only the Super Admin can change that account.');
+    }
     if (!password) {
       throw new Error('newPassword is required.');
     }
@@ -304,6 +321,12 @@ function adminResetUserPassword(sessionToken, payload) {
     var userRecord = getUserRecordByUserId_(userId);
     if (!userRecord) {
       throw new Error('User was not found.');
+    }
+    if (
+      normalizeString_(userRecord.Role) === 'Administrator' &&
+      !isSuperAdminUser_(authContext.user.userId)
+    ) {
+      throw new Error('Only the Super Admin can reset another administrator’s password.');
     }
 
     var existingCredential = getUserCredentialRecordByUserId_(userId);
@@ -346,6 +369,9 @@ function deleteUserAccount(sessionToken, payload) {
     if (normalizeString_(authContext.user.userId) === userId) {
       throw new Error('You cannot delete your own account.');
     }
+    if (isSuperAdminUser_(userId)) {
+      throw new Error('The Super Admin account is permanent and cannot be deleted.');
+    }
     return withScriptLock_(function () {
       var userSchema = resolveSchema_('USERS');
       var usersSheet = getSheetBySchema_(userSchema);
@@ -356,7 +382,13 @@ function deleteUserAccount(sessionToken, payload) {
       if (!targetUser) {
         throw new Error('User was not found.');
       }
-      var previous = mapUserForListResponse_(targetUser, getCredentialIndexByUserId_()[userId] || {});
+      if (
+        normalizeString_(targetUser.Role) === 'Administrator' &&
+        !isSuperAdminUser_(authContext.user.userId)
+      ) {
+        throw new Error('Only the Super Admin can delete another administrator.');
+      }
+      var previous = mapUserForListResponse_(targetUser, getCredentialIndexByUserId_()[userId] || {}, authContext.user);
       var credential = getUserCredentialRecordByUserId_(userId);
       var credentialRows = [];
       if (credential && credential.__rowNumber) {
@@ -386,22 +418,134 @@ function deleteUserAccount(sessionToken, payload) {
   }
 }
 
-function mapUserForListResponse_(record, credential) {
+function updateUserRole(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'users');
+    if (!isSuperAdminUser_(authContext.user.userId)) {
+      throw new Error('Only the Super Admin can change a user’s role.');
+    }
+    var input = payload || {};
+    var userId = normalizeString_(input.userId);
+    var newRole = normalizeStoredRole_(input.role);
+    if (!userId || !newRole) {
+      throw new Error('userId and role are required.');
+    }
+    if (normalizeString_(authContext.user.userId) === userId) {
+      throw new Error('You cannot change your own role.');
+    }
+    if (isSuperAdminUser_(userId)) {
+      throw new Error('Transfer ownership instead of changing the Super Admin role.');
+    }
+    var allowedRoles = ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff', 'Employee'];
+    if (allowedRoles.indexOf(newRole) === -1) {
+      throw new Error('That role is not allowed.');
+    }
+    var schema = resolveSchema_('USERS');
+    var sheet = getSheetBySchema_(schema);
+    var users = readSheetRecords_(schema);
+    var targetUser = users.find(function (record) {
+      return normalizeString_(record['User ID']) === userId;
+    });
+    if (!targetUser) {
+      throw new Error('User was not found.');
+    }
+    var previousRole = normalizeString_(targetUser.Role);
+    if (previousRole === newRole) {
+      return successResponse_('No role change was required.', { userId: userId, role: newRole });
+    }
+    var updated = Object.assign({}, targetUser);
+    updated.Role = newRole === 'Employee' ? 'Staff' : newRole;
+    updated['Updated Date'] = new Date();
+    updated['Updated By'] = authContext.user.userId;
+    updateSheetRecordByRow_(sheet, targetUser.__rowNumber, schema.columns, updated);
+    writeAuditLog_(
+      authContext.user,
+      'ROLE_CHANGE',
+      'Users',
+      userId,
+      'Updated user role.',
+      previousRole,
+      updated.Role
+    );
+    return successResponse_('User role updated.', { userId: userId, role: updated.Role });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to update user role.');
+  }
+}
+
+function transferSuperAdminOwnership(sessionToken, payload) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator'], 'users');
+    if (!isSuperAdminUser_(authContext.user.userId)) {
+      throw new Error('Only the Super Admin can transfer ownership.');
+    }
+    var userId = normalizeString_(payload && payload.userId);
+    if (!userId) {
+      throw new Error('userId is required.');
+    }
+    if (normalizeString_(authContext.user.userId) === userId) {
+      throw new Error('You already own this system.');
+    }
+    var targetUser = getUserRecordByUserId_(userId);
+    if (!targetUser) {
+      throw new Error('User was not found.');
+    }
+    if (normalizeString_(targetUser.Role) !== 'Administrator') {
+      throw new Error('Promote that person to Administrator first, then transfer ownership.');
+    }
+    if (!isActiveAccountStatus_(targetUser['Account Status'])) {
+      throw new Error('The new Super Admin must have an active account.');
+    }
+    var previousOwner = getSuperAdminUserId_();
+    setSettingValue_('SUPER_ADMIN_USER_ID', userId, authContext.user.userId);
+    writeAuditLog_(
+      authContext.user,
+      'OWNERSHIP_TRANSFER',
+      'Users',
+      userId,
+      'Transferred Super Admin ownership.',
+      previousOwner,
+      userId
+    );
+    return successResponse_('Ownership transferred. That user is now the Super Admin.', {
+      superAdminUserId: userId
+    });
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to transfer ownership.');
+  }
+}
+
+function mapUserForListResponse_(record, credential, actor) {
   var entry = credential || {};
+  var userId = normalizeString_(record['User ID']);
+  var role = normalizeString_(record.Role);
+  var isSuperAdmin = isSuperAdminUser_(userId);
+  var isSelf = Boolean(actor && normalizeString_(actor.userId) === userId);
+  var actorIsSuperAdmin = Boolean(actor && isSuperAdminUser_(actor.userId));
+  var isAdminRole = role === 'Administrator';
   return {
-    userId: normalizeString_(record['User ID']),
+    userId: userId,
     username: normalizeString_(entry.username),
     fullName: normalizeString_(record['Full Name']),
     email: normalizeEmail_(record['Google Email']),
     employeeId: normalizeString_(record['Employee ID']),
     department: normalizeString_(record.Department),
     jobTitle: normalizeString_(record['Job Title']),
-    role: normalizeString_(record.Role),
+    role: role,
+    displayRole: isSuperAdmin ? 'Super Admin' : isStaffLikeRole_(role) ? 'Staff' : role,
+    isSuperAdmin: isSuperAdmin,
+    isSelf: isSelf,
     supervisorId: normalizeString_(record['Supervisor ID']),
     accountStatus: normalizeString_(record['Account Status']),
     credentialStatus: normalizeString_(entry.username ? entry.credentialStatus || 'Active' : 'Not Set'),
     lockoutUntil: normalizeString_(entry.lockoutUntil),
     lastLogin: toClientDate_(record['Last Login']),
-    updatedDate: toClientDate_(record['Updated Date'])
+    updatedDate: toClientDate_(record['Updated Date']),
+    canSetPassword: !isSelf && (actorIsSuperAdmin || !isAdminRole),
+    canChangeStatus: !isSelf && !isSuperAdmin && (actorIsSuperAdmin || !isAdminRole),
+    canDelete: !isSelf && !isSuperAdmin && (actorIsSuperAdmin || !isAdminRole),
+    canPromoteAdmin: actorIsSuperAdmin && !isSelf && !isSuperAdmin && !isAdminRole,
+    canDemoteAdmin: actorIsSuperAdmin && !isSelf && !isSuperAdmin && isAdminRole,
+    canTransferOwnership: actorIsSuperAdmin && !isSelf && isAdminRole && !isSuperAdmin
   };
 }

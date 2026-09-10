@@ -38,7 +38,7 @@ var PAGE_TITLES = {
   notifications: 'Notifications',
   audit: 'Audit Log',
   users: 'User Management',
-  settings: 'Settings',
+  settings: 'System Settings',
   login: 'Sign in'
 };
 
@@ -60,7 +60,7 @@ var NAV_ITEMS = [
   { id: 'notifications', label: 'Notifications', group: 'Admin', svg: '<path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.1-1.6-5.6-4.5-6.3V4c0-.8-.7-1.5-1.5-1.5S10.5 3.2 10.5 4v.7C7.6 5.4 6 7.9 6 11v5l-2 2v1h16v-1l-2-2z"/>', roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'] },
   { id: 'audit', label: 'Audit Log', group: 'Admin', svg: '<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2zm0-4H7V7h10v2z"/>', roles: ['Administrator', 'Manager'] },
   { id: 'users', label: 'Users', group: 'Admin', svg: '<path d="M12 1L3 5v6c0 5.6 3.8 10.7 9 12 5.2-1.3 9-6.4 9-12V5l-9-4zm0 10.2a2.5 2.5 0 110-5 2.5 2.5 0 010 5zm0 6.8c-2.1 0-4-.9-5.2-2.3.1-1.7 3.5-2.6 5.2-2.6s5.1.9 5.2 2.6C16 17.1 14.1 18 12 18z"/>', roles: ['Administrator'] },
-  { id: 'settings', label: 'Settings', group: 'Admin', svg: '<path d="M19.1 12.9c0-.3.1-.6.1-.9s0-.6-.1-.9l2.1-1.6c.2-.1.2-.4.1-.6l-2-3.5c-.1-.2-.4-.3-.6-.2l-2.5 1c-.5-.4-1.1-.7-1.7-.9l-.4-2.6c0-.2-.2-.4-.5-.4h-4c-.3 0-.5.2-.5.4l-.4 2.6c-.6.2-1.2.5-1.7.9l-2.5-1c-.2-.1-.5 0-.6.2l-2 3.5c-.1.2 0 .5.1.6L4.9 11c0 .3-.1.6-.1.9s0 .6.1.9l-2.1 1.6c-.2.1-.2.4-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7.9l.4 2.6c0 .2.2.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.2 1.2-.5 1.7-.9l2.5 1c.2.1.5 0 .6-.2l2-3.5c.1-.2 0-.5-.1-.6l-2.1-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z"/>', roles: ['Administrator'] }
+  { id: 'settings', label: 'System Settings', group: 'Admin', svg: '<path d="M19.1 12.9c0-.3.1-.6.1-.9s0-.6-.1-.9l2.1-1.6c.2-.1.2-.4.1-.6l-2-3.5c-.1-.2-.4-.3-.6-.2l-2.5 1c-.5-.4-1.1-.7-1.7-.9l-.4-2.6c0-.2-.2-.4-.5-.4h-4c-.3 0-.5.2-.5.4l-.4 2.6c-.6.2-1.2.5-1.7.9l-2.5-1c-.2-.1-.5 0-.6.2l-2 3.5c-.1.2 0 .5.1.6L4.9 11c0 .3-.1.6-.1.9s0 .6.1.9l-2.1 1.6c-.2.1-.2.4-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7.9l.4 2.6c0 .2.2.4.5.4h4c.3 0 .5-.2.5-.4l.4-2.6c.6-.2 1.2-.5 1.7-.9l2.5 1c.2.1.5 0 .6-.2l2-3.5c.1-.2 0-.5-.1-.6l-2.1-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z"/>', roles: ['Administrator'] }
 ];
 
 function buildNavGroups_(navItems) {
@@ -88,13 +88,14 @@ function doGet(e) {
   template.contentTemplate = contentTemplate;
   template.pageTitle = PAGE_TITLES[activePage] || 'Tasks Management';
   template.appTitle = getAppTitle_();
+  template.tabTitle = template.pageTitle + ' | KSL';
   template.scriptUrl = getScriptUrl();
   template.navItems = isLoginPage ? [] : NAV_ITEMS;
   template.navGroups = isLoginPage ? [] : buildNavGroups_(NAV_ITEMS);
 
   return template
     .evaluate()
-    .setTitle(template.pageTitle + ' | ' + template.appTitle)
+    .setTitle(template.tabTitle)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -103,7 +104,7 @@ function include(filename) {
 }
 
 function getScriptUrl() {
-  return ScriptApp.getService().getUrl();
+  return toShareableWebAppUrl_(ScriptApp.getService().getUrl());
 }
 
 function resolveTemplateOrFallback_(filename) {

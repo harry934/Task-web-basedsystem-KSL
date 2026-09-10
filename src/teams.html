@@ -1,7 +1,7 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>Teams</h1>
-    <p>Maintain operational teams used for task assignment, monitoring, and performance snapshots.</p>
+    <p>Team records used for assignment and reports. Names in Settings → Dimensions are labels until imported here.</p>
   </div>
 
   <div class="card">
@@ -15,6 +15,7 @@
           <i class="fa-solid fa-rotate-right"></i>
           Refresh
         </button>
+        <button id="teamsImportButton" class="btn btn-outline" type="button">Import from Dimensions</button>
         <button id="teamsClearButton" class="btn btn-outline" type="button">Clear</button>
       </div>
       <div class="toolbar-right">
@@ -110,7 +111,7 @@
     function renderTeams() {
       var body = document.getElementById('teamsTableBody');
       if (!state.teams.length) {
-        body.innerHTML = '<tr><td colspan="7" class="empty-state">No matching data found.</td></tr>';
+        body.innerHTML = '<tr><td colspan="7" class="empty-state">No team records yet. Import names from Settings → Dimensions or click New Team.</td></tr>';
         return;
       }
       body.innerHTML = state.teams.map(function (team) {
@@ -144,7 +145,15 @@
     }
 
     function loadTeams() {
-      KSL.call('listTeams', KSL.getSessionToken(), getFilters())
+      var filters = getFilters();
+      KSL.replaceFiltersInUrl({
+        query: filters.query,
+        department: filters.department,
+        teamLeader: filters.teamLeader,
+        status: filters.status,
+        page: filters.page > 1 ? filters.page : ''
+      });
+      KSL.call('listTeams', KSL.getSessionToken(), filters)
         .then(function (response) {
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Failed to load teams.');
@@ -178,6 +187,19 @@
         document.getElementById('teamsRefreshButton').addEventListener('click', function () {
           state.page = 1;
           loadTeams();
+        });
+        document.getElementById('teamsImportButton').addEventListener('click', function () {
+          KSL.call('importTeamsFromDimensions', KSL.getSessionToken())
+            .then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Import failed.');
+              }
+              KSL.showToast(response.message || 'Imported from Dimensions.', 'success');
+              loadTeams();
+            })
+            .catch(function (error) {
+              KSL.showToast(error.message || 'Import failed.', 'error');
+            });
         });
         document.getElementById('teamsClearButton').addEventListener('click', function () {
           document.getElementById('teamsSearchInput').value = '';
@@ -241,36 +263,64 @@
             document.getElementById('teamStatusInput').value = team.status || 'Active';
             KSL.openModal('teamModalBackdrop');
           } else if (button.dataset.action === 'delete') {
-            if (!KSL.confirmDelete(button.dataset.name || id)) {
-              return;
-            }
-            KSL.call('deleteTeam', KSL.getSessionToken(), { teamId: id })
-              .then(function (response) {
-                if (!response || !response.success) {
-                  throw new Error((response && response.message) || 'Unable to delete team.');
-                }
-                KSL.showToast(response.message || 'Team deleted.', 'success');
-                loadTeams();
-              })
-              .catch(function (error) {
-                KSL.showToast(error.message || 'Unable to delete team.', 'error');
+            KSL.confirmDelete(button.dataset.name || id).then(function (ok) {
+              if (!ok) {
+                return;
+              }
+              var removed = state.teams.filter(function (item) {
+                return item.teamId === id;
+              })[0];
+              state.teams = state.teams.filter(function (item) {
+                return item.teamId !== id;
               });
+              renderTeams();
+              KSL.scheduleAction({
+                message: 'Team will be deleted. Undo?',
+                delayMs: 5000,
+                run: function () {
+                  return KSL.call('deleteTeam', KSL.getSessionToken(), { teamId: id }).then(function (response) {
+                    if (!response || !response.success) {
+                      throw new Error((response && response.message) || 'Unable to delete team.');
+                    }
+                    KSL.showToast(response.message || 'Team deleted.', 'success');
+                  });
+                },
+                onUndo: function () {
+                  if (removed) {
+                    state.teams.unshift(removed);
+                    renderTeams();
+                  }
+                  KSL.showToast('Delete cancelled.', 'info');
+                }
+              });
+            });
           } else if (button.dataset.action === 'archive') {
-            if (!window.confirm('Archive this team? Active task references will block this action.')) {
-              return;
-            }
-            KSL.call('archiveTeam', KSL.getSessionToken(), { teamId: id })
-              .then(function (response) {
-                if (!response || !response.success) {
-                  throw new Error((response && response.message) || 'Unable to archive team.');
-                }
-                KSL.showToast(response.message || 'Team archived.', 'success');
-                loadTeams();
-              })
-              .catch(function (error) {
-                KSL.showToast(error.message || 'Unable to archive team.', 'error');
-              });
+            KSL.confirmModal({
+              title: 'Archive team',
+              message: 'Archive this team? Active task references will block this action.'
+            }).then(function (ok) {
+              if (!ok) {
+                return;
+              }
+              KSL.call('archiveTeam', KSL.getSessionToken(), { teamId: id })
+                .then(function (response) {
+                  if (!response || !response.success) {
+                    throw new Error((response && response.message) || 'Unable to archive team.');
+                  }
+                  KSL.showToast(response.message || 'Team archived.', 'success');
+                  loadTeams();
+                })
+                .catch(function (error) {
+                  KSL.showToast(error.message || 'Unable to archive team.', 'error');
+                });
+            });
           }
+        });
+        KSL.applyFiltersFromUrl({
+          query: 'teamsSearchInput',
+          department: 'teamsDepartmentFilter',
+          teamLeader: 'teamsLeaderFilter',
+          status: 'teamsStatusFilter'
         });
         loadTeams();
       });

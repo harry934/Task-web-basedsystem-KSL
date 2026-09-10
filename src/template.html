@@ -5,7 +5,7 @@
     <base target="_top">
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= pageTitle ?></title>
+    <title><?= tabTitle ?></title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230b1f3a'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23c5a028' stroke-width='3'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,6 +29,7 @@
       <span class="stripe-red"></span>
       <span class="stripe-green"></span>
     </div>
+    <div id="appProgressBar" class="app-progress-bar hidden" aria-hidden="true"></div>
 
     <div id="appProcessingOverlay" class="processing-overlay hidden">
       <div class="processing-card">
@@ -55,7 +56,8 @@
       </main>
     <? } else { ?>
       <div class="app-shell">
-        <aside class="app-sidebar">
+        <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
+        <aside class="app-sidebar" id="appSidebar">
           <div class="brand-block">
             <img class="brand-logo-img" alt="Kenya Shipyards Limited">
             <div class="brand-text">
@@ -74,6 +76,9 @@
         <div class="app-main">
           <header class="app-topbar">
             <div class="topbar-left">
+              <button id="sidebarToggle" class="icon-button sidebar-toggle" type="button" aria-label="Open menu">
+                <i class="fa-solid fa-bars"></i>
+              </button>
               <img class="topbar-logo" alt="Kenya Shipyards Limited">
               <div>
                 <p class="topbar-kicker">Republic of Kenya</p>
@@ -81,12 +86,23 @@
               </div>
             </div>
             <div class="topbar-right">
-              <button id="notificationButton" class="icon-button" type="button" title="Notifications">
-                <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.1-1.6-5.6-4.5-6.3V4c0-.8-.7-1.5-1.5-1.5S10.5 3.2 10.5 4v.7C7.6 5.4 6 7.9 6 11v5l-2 2v1h16v-1l-2-2z"/>
-                </svg>
-                <span id="notificationBadge" class="badge hidden">0</span>
-              </button>
+              <div class="notification-wrap">
+                <button id="notificationButton" class="icon-button" type="button" title="Notifications" aria-expanded="false">
+                  <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.1-1.6-5.6-4.5-6.3V4c0-.8-.7-1.5-1.5-1.5S10.5 3.2 10.5 4v.7C7.6 5.4 6 7.9 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                  </svg>
+                  <span id="notificationBadge" class="badge hidden">0</span>
+                </button>
+                <div id="notificationDropdown" class="notification-dropdown hidden">
+                  <div class="notification-dropdown-header">
+                    <strong>Notifications</strong>
+                    <button id="notificationViewAll" class="btn btn-outline" type="button">View all</button>
+                  </div>
+                  <div id="notificationDropdownList" class="notification-dropdown-list">
+                    <p class="page-note">No unread notifications.</p>
+                  </div>
+                </div>
+              </div>
               <div class="user-chip">
                 <img id="userAvatar" alt="User profile photo">
                 <div class="user-meta">
@@ -116,6 +132,89 @@
         navItems: <?!= JSON.stringify(navItems) ?>
       };
     </script>
+
+    <div id="kslConfirmModal" class="modal-backdrop hidden">
+      <div class="modal modal-narrow">
+        <div class="modal-header">
+          <h3 id="kslConfirmTitle">Confirm</h3>
+          <button class="btn btn-outline" type="button" id="kslConfirmClose">Close</button>
+        </div>
+        <p id="kslConfirmMessage"></p>
+        <div class="modal-footer">
+          <button class="btn btn-outline" type="button" id="kslConfirmCancel">Cancel</button>
+          <button class="btn btn-primary" type="button" id="kslConfirmOk">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="kslPromptModal" class="modal-backdrop hidden">
+      <div class="modal modal-narrow">
+        <div class="modal-header">
+          <h3 id="kslPromptTitle">Enter a value</h3>
+          <button class="btn btn-outline" type="button" id="kslPromptClose">Close</button>
+        </div>
+        <p id="kslPromptMessage" class="page-note"></p>
+        <div class="field">
+          <label id="kslPromptLabel" for="kslPromptInput">Value</label>
+          <input id="kslPromptInput" class="input" type="text">
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" type="button" id="kslPromptCancel">Cancel</button>
+          <button class="btn btn-primary" type="button" id="kslPromptOk">Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="kslPasswordModal" class="modal-backdrop hidden">
+      <div class="modal modal-narrow">
+        <div class="modal-header">
+          <h3>Set password</h3>
+          <button class="btn btn-outline" type="button" id="kslPasswordClose">Close</button>
+        </div>
+        <form id="kslPasswordForm">
+          <div class="field">
+            <label for="kslPasswordUsername">Username</label>
+            <input id="kslPasswordUsername" class="input" type="text" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label for="kslPasswordValue">New password</label>
+            <input id="kslPasswordValue" class="input" type="password" autocomplete="new-password" required>
+            <div id="kslPasswordHints" class="password-hints"></div>
+          </div>
+          <div class="field">
+            <label for="kslPasswordConfirm">Confirm password</label>
+            <input id="kslPasswordConfirm" class="input" type="password" autocomplete="new-password" required>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" type="button" id="kslPasswordCancel">Cancel</button>
+            <button class="btn btn-primary" type="submit">Save password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="kslPdfPreviewModal" class="modal-backdrop hidden">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h3 id="kslPdfPreviewTitle">PDF preview</h3>
+          <button class="btn btn-outline" type="button" id="kslPdfPreviewClose">Close</button>
+        </div>
+        <iframe id="kslPdfPreviewFrame" class="pdf-preview-frame" title="PDF preview"></iframe>
+        <div class="modal-footer">
+          <button class="btn btn-outline" type="button" id="kslPdfPreviewCloseFooter">Close</button>
+          <button class="btn btn-primary" type="button" id="kslPdfPreviewDownload">Download</button>
+        </div>
+      </div>
+    </div>
+
+    <aside id="kslSidePanel" class="side-panel hidden" aria-hidden="true">
+      <div class="side-panel-header">
+        <h3 id="kslSidePanelTitle">Details</h3>
+        <button class="btn btn-outline" type="button" id="kslSidePanelClose">Close</button>
+      </div>
+      <div id="kslSidePanelBody" class="side-panel-body"></div>
+    </aside>
+
     <?!= include('scripts'); ?>
   </body>
 </html>

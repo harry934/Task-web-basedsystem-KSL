@@ -1,7 +1,10 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>Departments</h1>
-    <p>Maintain organizational departments used in task assignment and reporting.</p>
+    <p>
+      These are department records used for tasks and staff. Names listed under Settings → Dimensions are dropdown
+      labels until you import or create them here.
+    </p>
   </div>
 
   <div class="card">
@@ -12,6 +15,7 @@
           New Department
         </button>
         <button id="departmentsRefreshButton" class="btn btn-outline" type="button">Refresh</button>
+        <button id="departmentsImportButton" class="btn btn-outline" type="button">Import from Dimensions</button>
         <button id="departmentsClearButton" class="btn btn-outline" type="button">Clear</button>
       </div>
       <div class="toolbar-right">
@@ -117,7 +121,7 @@
         return;
       }
       if (!state.departments.length) {
-        body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fa-solid fa-building"></i><p>No departments found.</p></td></tr>';
+        body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fa-solid fa-building"></i><p>No department records yet. Import names from Settings → Dimensions or click New Department.</p></td></tr>';
         return;
       }
 
@@ -199,7 +203,14 @@
 
     function loadDepartments(retryCount) {
       var attempts = Number(retryCount || 0);
-      KSL.call('listDepartments', KSL.getSessionToken(), getFilters())
+      var filters = getFilters();
+      KSL.replaceFiltersInUrl({
+        query: filters.query,
+        departmentHead: filters.departmentHead,
+        status: filters.status,
+        page: filters.page > 1 ? filters.page : ''
+      });
+      KSL.call('listDepartments', KSL.getSessionToken(), filters)
         .then(function (response) {
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Failed to load departments.');
@@ -289,22 +300,27 @@
     }
 
     function archiveDepartment(departmentId) {
-      if (!window.confirm('Archive this department? This action is reversible by editing status.')) {
-        return;
-      }
-      KSL.call('archiveDepartment', KSL.getSessionToken(), {
-        departmentId: departmentId
-      })
-        .then(function (response) {
-          if (!response || !response.success) {
-            throw new Error((response && response.message) || 'Unable to archive department.');
-          }
-          KSL.showToast('Department archived.', 'success');
-          loadDepartments();
+      KSL.confirmModal({
+        title: 'Archive department',
+        message: 'Archive this department? You can restore it later by editing status.'
+      }).then(function (ok) {
+        if (!ok) {
+          return;
+        }
+        KSL.call('archiveDepartment', KSL.getSessionToken(), {
+          departmentId: departmentId
         })
-        .catch(function (error) {
-          KSL.showToast(error.message || 'Unable to archive department.', 'error');
-        });
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Unable to archive department.');
+            }
+            KSL.showToast('Department archived.', 'success');
+            loadDepartments();
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Unable to archive department.', 'error');
+          });
+      });
     }
 
     function bindEvents() {
@@ -312,6 +328,19 @@
       document.getElementById('departmentsRefreshButton').addEventListener('click', function () {
         state.page = 1;
         loadDepartments();
+      });
+      document.getElementById('departmentsImportButton').addEventListener('click', function () {
+        KSL.call('importDepartmentsFromDimensions', KSL.getSessionToken())
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Import failed.');
+            }
+            KSL.showToast(response.message || 'Imported from Dimensions.', 'success');
+            loadDepartments();
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Import failed.', 'error');
+          });
       });
       document.getElementById('departmentsSearchInput').addEventListener(
         'input',
@@ -351,18 +380,38 @@
           openEditModal(id);
         } else if (action === 'archive') {
           archiveDepartment(id);
-        } else if (action === 'delete' && KSL.confirmDelete(button.dataset.name || id)) {
-          KSL.call('deleteDepartment', KSL.getSessionToken(), { departmentId: id })
-            .then(function (response) {
-              if (!response || !response.success) {
-                throw new Error((response && response.message) || 'Unable to delete department.');
-              }
-              KSL.showToast('Department deleted.', 'success');
-              loadDepartments();
-            })
-            .catch(function (error) {
-              KSL.showToast(error.message || 'Unable to delete department.', 'error');
+        } else if (action === 'delete') {
+          KSL.confirmDelete(button.dataset.name || id).then(function (ok) {
+            if (!ok) {
+              return;
+            }
+            var removed = state.departments.filter(function (item) {
+              return item.departmentId === id;
+            })[0];
+            state.departments = state.departments.filter(function (item) {
+              return item.departmentId !== id;
             });
+            renderDepartments();
+            KSL.scheduleAction({
+              message: 'Department will be deleted. Undo?',
+              delayMs: 5000,
+              run: function () {
+                return KSL.call('deleteDepartment', KSL.getSessionToken(), { departmentId: id }).then(function (response) {
+                  if (!response || !response.success) {
+                    throw new Error((response && response.message) || 'Unable to delete department.');
+                  }
+                  KSL.showToast('Department deleted.', 'success');
+                });
+              },
+              onUndo: function () {
+                if (removed) {
+                  state.departments.unshift(removed);
+                  renderDepartments();
+                }
+                KSL.showToast('Delete cancelled.', 'info');
+              }
+            });
+          });
         }
       });
     }
@@ -370,6 +419,14 @@
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator', 'Manager'], function () {
         bindEvents();
+        KSL.applyFiltersFromUrl({
+          query: 'departmentsSearchInput',
+          departmentHead: 'departmentsHead',
+          status: 'departmentsStatusFilter'
+        });
+        if (KSL.readQueryParam('page')) {
+          state.page = Number(KSL.readQueryParam('page')) || 1;
+        }
         loadDepartments();
       });
     });

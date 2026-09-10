@@ -84,7 +84,7 @@
       options.format = format;
       KSL.callBusy('exportPerformance', KSL.getSessionToken(), options).then(function (response) {
         if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
-        KSL.downloadFile(response.data);
+        KSL.previewOrDownloadFile(response.data);
         KSL.showToast('Report generated.', 'success');
       }).catch(function (error) { KSL.showToast(error.message || 'Export failed.', 'error'); });
     }
@@ -112,23 +112,67 @@
           var button = event.target.closest('button[data-id]');
           if (!button) return;
           var item = state.items.find(function (entry) { return entry.performanceId === button.dataset.id; }) || {};
-          var strengths = window.prompt('Strengths:', item.strengths || '') || '';
-          var areas = window.prompt('Areas for improvement:', item.areasForImprovement || '') || '';
-          var recommendations = window.prompt('Recommendations:', item.recommendations || '') || '';
-          var supervisorRating = Number(window.prompt('Supervisor rating (0-100):', String(item.supervisorRating || 0)) || 0);
-          var managementRating = Number(window.prompt('Management rating (0-100):', String(item.managementRating || 0)) || 0);
-          KSL.call('reviewPerformance', KSL.getSessionToken(), {
-            performanceId: button.dataset.id,
-            strengths: strengths,
-            areasForImprovement: areas,
-            recommendations: recommendations,
-            supervisorRating: supervisorRating,
-            managementRating: managementRating
-          }).then(function (response) {
-            if (!response || !response.success) throw new Error((response && response.message) || 'Review failed.');
-            KSL.showToast('Performance review saved.', 'success');
-            load();
-          }).catch(function (error) { KSL.showToast(error.message || 'Review failed.', 'error'); });
+          KSL.promptModal({ title: 'Strengths', label: 'Strengths', defaultValue: item.strengths || '' })
+            .then(function (strengths) {
+              if (strengths === null) {
+                return null;
+              }
+              return KSL.promptModal({
+                title: 'Areas for improvement',
+                label: 'Areas',
+                defaultValue: item.areasForImprovement || ''
+              }).then(function (areas) {
+                if (areas === null) {
+                  return null;
+                }
+                return KSL.promptModal({
+                  title: 'Recommendations',
+                  label: 'Recommendations',
+                  defaultValue: item.recommendations || ''
+                }).then(function (recommendations) {
+                  if (recommendations === null) {
+                    return null;
+                  }
+                  return KSL.promptModal({
+                    title: 'Supervisor rating',
+                    label: 'Rating (0-100)',
+                    inputType: 'number',
+                    defaultValue: String(item.supervisorRating || 0)
+                  }).then(function (supervisorRating) {
+                    if (supervisorRating === null) {
+                      return null;
+                    }
+                    return KSL.promptModal({
+                      title: 'Management rating',
+                      label: 'Rating (0-100)',
+                      inputType: 'number',
+                      defaultValue: String(item.managementRating || 0)
+                    }).then(function (managementRating) {
+                      if (managementRating === null) {
+                        return null;
+                      }
+                      return KSL.call('reviewPerformance', KSL.getSessionToken(), {
+                        performanceId: button.dataset.id,
+                        strengths: strengths,
+                        areasForImprovement: areas,
+                        recommendations: recommendations,
+                        supervisorRating: Number(supervisorRating || 0),
+                        managementRating: Number(managementRating || 0)
+                      });
+                    });
+                  });
+                });
+              });
+            })
+            .then(function (response) {
+              if (!response) {
+                return;
+              }
+              if (!response.success) throw new Error((response && response.message) || 'Review failed.');
+              KSL.showToast('Performance review saved.', 'success');
+              load();
+            })
+            .catch(function (error) { KSL.showToast(error.message || 'Review failed.', 'error'); });
         });
         load();
       });

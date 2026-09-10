@@ -1,8 +1,8 @@
 var DEFAULT_SESSION_TTL_SECONDS = 21600;
 var SESSION_CACHE_PREFIX = 'SESSION_';
 var ACTIVITY_CACHE_PREFIX = 'ACT_';
-var SETTINGS_CACHE_KEY = 'KSL_SETTINGS_MAP';
-var DIMENSIONS_CACHE_KEY = 'KSL_DIMENSIONS_MAP';
+var SETTINGS_CACHE_KEY = 'KSL_SETTINGS_MAP_V2';
+var DIMENSIONS_CACHE_KEY = 'KSL_DIMENSIONS_MAP_V2';
 var EXECUTION_SPREADSHEET_ = null;
 var EXECUTION_SETTINGS_CACHE_ = null;
 var EXECUTION_USERS_CACHE_ = null;
@@ -12,6 +12,31 @@ var SCRIPT_LOCK_HELD_ = false;
 var INACTIVE_DIMENSION_PREFIX_ = '[INACTIVE] ';
 var KSL_OFFICIAL_LOGO_URL =
   'https://kenyashipyards.co.ke/wp-content/uploads/2022/06/cropped-KSL-High-quality-Logo-300x273.png';
+
+function toShareableWebAppUrl_(url) {
+  var raw = String(url || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  var match = raw.match(
+    /\/(?:a\/\*\/macros\/s|a\/macros\/[^/]+\/s|macros\/(?:u\/\d+\/)?s)\/([A-Za-z0-9_-]+)\/(exec|dev)\b/i
+  );
+  if (!match) {
+    match = raw.match(/\/macros\/s\/([A-Za-z0-9_-]+)\/(exec|dev)\b/i);
+  }
+  if (!match) {
+    return raw;
+  }
+
+  var deploymentId = match[1];
+  var kind = String(match[2] || 'exec').toLowerCase();
+  if (kind === 'dev') {
+    return 'https://script.google.com/macros/s/' + deploymentId + '/dev';
+  }
+
+  return 'https://script.google.com/a/*/macros/s/' + deploymentId + '/exec';
+}
 
 var PAGE_ROLE_ACCESS = {
   dashboard: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
@@ -324,33 +349,45 @@ function buildCsvText_(headers, rows) {
 function createPdfFromTable_(title, headers, rows) {
   var reportTitle = normalizeString_(title) || 'Report';
   var stamp = Utilities.formatDate(new Date(), APP_TIMEZONE, 'yyyyMMdd-HHmmss');
-  var doc = DocumentApp.create(reportTitle + ' ' + stamp);
-  try {
-    var body = doc.getBody();
-    body.appendParagraph(getSettingValue_('REPORT_ORG_NAME', 'Kenya Shipyards Limited')).setHeading(
-      DocumentApp.ParagraphHeading.HEADING2
-    );
-    body.appendParagraph(reportTitle).setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    body.appendParagraph(
-      'Generated: ' + Utilities.formatDate(new Date(), APP_TIMEZONE, 'dd/MM/yyyy HH:mm') + ' (Africa/Nairobi)'
-    );
-    var tableRows = [headers].concat(
-      (rows || []).map(function (row) {
-        return headers.map(function (header, index) {
-          if (Array.isArray(row)) {
-            return String(row[index] == null ? '' : row[index]);
-          }
-          return String(row[header] == null ? '' : row[header]);
-        });
+  var orgName = getSettingValue_('REPORT_ORG_NAME', 'Kenya Shipyards Limited');
+  var generated =
+    'Generated: ' + Utilities.formatDate(new Date(), APP_TIMEZONE, 'dd/MM/yyyy HH:mm') + ' (Africa/Nairobi)';
+  var columnHeaders = headers && headers.length ? headers : ['Value'];
+  var tableRows = [columnHeaders].concat(
+    (rows || []).map(function (row) {
+      return columnHeaders.map(function (header, index) {
+        if (Array.isArray(row)) {
+          return String(row[index] == null ? '' : row[index]);
+        }
+        return String(row[header] == null ? '' : row[header]);
+      });
+    })
+  );
+  if (tableRows.length === 1) {
+    tableRows.push(
+      columnHeaders.map(function (_, index) {
+        return index === 0 ? 'No matching data found.' : '';
       })
     );
-    if (tableRows.length === 1) {
-      body.appendParagraph('No matching data found.');
-    } else {
-      body.appendTable(tableRows);
-    }
-    doc.saveAndClose();
-    var file = DriveApp.getFileById(doc.getId());
+  }
+
+  var spreadsheet = SpreadsheetApp.create(reportTitle + ' ' + stamp);
+  var fileId = spreadsheet.getId();
+  try {
+    var sheet = spreadsheet.getSheets()[0];
+    sheet.setName('Report');
+    sheet.getRange(1, 1).setValue(orgName).setFontWeight('bold').setFontSize(14);
+    sheet.getRange(2, 1).setValue(reportTitle).setFontWeight('bold').setFontSize(16);
+    sheet.getRange(3, 1).setValue(generated);
+    var startRow = 5;
+    sheet.getRange(startRow, 1, tableRows.length, columnHeaders.length).setValues(tableRows);
+    sheet
+      .getRange(startRow, 1, 1, columnHeaders.length)
+      .setFontWeight('bold')
+      .setBackground('#0b1f3a')
+      .setFontColor('#ffffff');
+    SpreadsheetApp.flush();
+    var file = DriveApp.getFileById(fileId);
     var pdf = file.getAs(MimeType.PDF);
     file.setTrashed(true);
     return {
@@ -360,7 +397,7 @@ function createPdfFromTable_(title, headers, rows) {
     };
   } catch (error) {
     try {
-      DriveApp.getFileById(doc.getId()).setTrashed(true);
+      DriveApp.getFileById(fileId).setTrashed(true);
     } catch (ignore) {
       // Best-effort cleanup.
     }
@@ -789,7 +826,12 @@ function mapUserRecordToSessionUser_(record) {
     username: normalizeString_(credential ? credential.Username : ''),
     fullName: normalizeString_(record['Full Name']),
     role: normalizeString_(record.Role),
-    displayRole: isStaffLikeRole_(record.Role) ? 'Staff' : normalizeString_(record.Role),
+    displayRole: isSuperAdminUser_(record['User ID'])
+      ? 'Super Admin'
+      : isStaffLikeRole_(record.Role)
+        ? 'Staff'
+        : normalizeString_(record.Role),
+    isSuperAdmin: isSuperAdminUser_(record['User ID']),
     accountStatus: normalizeString_(record['Account Status']),
     employeeId: normalizeString_(record['Employee ID']),
     department: normalizeString_(record.Department),
@@ -972,13 +1014,14 @@ function parseSettingValue_(value, dataType) {
     return '';
   }
 
-  if (dataType === 'number' || dataType === 'percentage') {
+  var type = String(dataType || '').toLowerCase();
+  if (type === 'number' || type === 'percentage') {
     return normalizeNumber_(value, 0);
   }
-  if (dataType === 'boolean') {
+  if (type === 'boolean') {
     return normalizeBoolean_(value);
   }
-  if (dataType === 'date') {
+  if (type === 'date') {
     return value instanceof Date ? value : new Date(value);
   }
   return String(value);
@@ -990,6 +1033,86 @@ function getSettingValue_(key, defaultValue) {
     return settings[key];
   }
   return defaultValue === undefined ? '' : defaultValue;
+}
+
+function setSettingValue_(key, value, actorId) {
+  var settingKey = normalizeString_(key);
+  if (!settingKey) {
+    return;
+  }
+  var schema = resolveSchema_('SETTINGS');
+  var sheet = getSheetBySchema_(schema);
+  var records = safeReadSheetRecords_(schema);
+  var current = records.find(function (record) {
+    return normalizeString_(record['Setting Key']) === settingKey;
+  });
+  var now = new Date();
+  if (current) {
+    var updated = Object.assign({}, current);
+    updated['Setting Value'] = value == null ? '' : value;
+    updated['Updated Date'] = now;
+    updated['Updated By'] = actorId || 'system';
+    updateSheetRecordByRow_(sheet, current.__rowNumber, schema.columns, updated);
+  } else {
+    appendSheetRecord_(sheet, schema.columns, {
+      'Setting Key': settingKey,
+      'Setting Value': value == null ? '' : value,
+      'Setting Group': 'Security',
+      'Data Type': 'Text',
+      Description: 'Permanent Super Admin user ID.',
+      Editable: 'FALSE',
+      Status: 'Active',
+      'Updated Date': now,
+      'Updated By': actorId || 'system'
+    });
+  }
+  clearSettingsAndDimensionsCache_();
+}
+
+function getSuperAdminUserId_() {
+  return ensureSuperAdminAssigned_('');
+}
+
+function isSuperAdminUser_(userId) {
+  var id = normalizeString_(userId);
+  return Boolean(id) && id === getSuperAdminUserId_();
+}
+
+function ensureSuperAdminAssigned_(preferredUserId) {
+  var current = normalizeString_(getSettingValue_('SUPER_ADMIN_USER_ID', ''));
+  if (current) {
+    var existing = getUserRecordByUserId_(current);
+    if (existing && normalizeString_(existing.Role) === 'Administrator') {
+      return current;
+    }
+  }
+  var preferred = normalizeString_(preferredUserId);
+  if (preferred) {
+    var preferredRecord = getUserRecordByUserId_(preferred);
+    if (preferredRecord && normalizeString_(preferredRecord.Role) === 'Administrator') {
+      setSettingValue_('SUPER_ADMIN_USER_ID', preferred, 'system');
+      return preferred;
+    }
+  }
+  var admins = [];
+  try {
+    admins = safeReadSheetRecords_('USERS').filter(function (record) {
+      return normalizeString_(record.Role) === 'Administrator';
+    });
+  } catch (error) {
+    admins = [];
+  }
+  if (!admins.length) {
+    return '';
+  }
+  admins.sort(function (a, b) {
+    return new Date(a['Created Date'] || 0).getTime() - new Date(b['Created Date'] || 0).getTime();
+  });
+  var ownerId = normalizeString_(admins[0]['User ID']);
+  if (ownerId) {
+    setSettingValue_('SUPER_ADMIN_USER_ID', ownerId, 'system');
+  }
+  return ownerId;
 }
 
 function getDimensionValuesMap_() {
@@ -1161,6 +1284,25 @@ function findUserByEmployeeId_(employeeId) {
   for (var i = 0; i < users.length; i += 1) {
     if (normalizeString_(users[i]['Employee ID']) === id) {
       return users[i];
+    }
+  }
+  return null;
+}
+
+function findEmployeeRecordById_(employeeId) {
+  var id = normalizeString_(employeeId);
+  if (!id) {
+    return null;
+  }
+  var employees = [];
+  try {
+    employees = readSheetRecords_('EMPLOYEES');
+  } catch (error) {
+    return null;
+  }
+  for (var i = 0; i < employees.length; i += 1) {
+    if (normalizeString_(employees[i]['Employee ID']) === id) {
+      return employees[i];
     }
   }
   return null;

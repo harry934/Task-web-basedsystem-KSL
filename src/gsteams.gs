@@ -1,7 +1,10 @@
 function listTeams(sessionToken, options) {
   try {
-    requireSession_(sessionToken, ['Administrator', 'Manager'], 'teams');
+    var authContext = requireSession_(sessionToken, ['Administrator', 'Manager'], 'teams');
     var filters = options || {};
+    if (Boolean(filters.importMissing) || !safeReadSheetRecords_('TEAMS').length) {
+      syncTeamsFromDimensions_(authContext.user);
+    }
     var query = normalizeString_(filters.query).toLowerCase();
     var departmentFilter = normalizeString_(filters.department).toLowerCase();
     var leaderFilter = normalizeString_(filters.teamLeader).toLowerCase();
@@ -296,4 +299,79 @@ function mapTeamForResponse_(record) {
     createdDate: toClientDate_(record['Created Date']),
     updatedDate: toClientDate_(record['Updated Date'])
   };
+}
+
+function importTeamsFromDimensions(sessionToken) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator', 'Manager'], 'teams');
+    var created = syncTeamsFromDimensions_(authContext.user);
+    return successResponse_(
+      created.length
+        ? 'Imported ' + created.length + ' team' + (created.length === 1 ? '' : 's') + ' from Dimensions.'
+        : 'All Dimension team names already exist here.',
+      { created: created }
+    );
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to import teams.');
+  }
+}
+
+function syncTeamsFromDimensions_(actor) {
+  return withScriptLock_(function () {
+    var names = getDimensionValues_('Teams') || [];
+    if (!names.length) {
+      return [];
+    }
+    var departments = [];
+    try {
+      departments = readSheetRecords_('DEPARTMENTS');
+    } catch (error) {
+      departments = [];
+    }
+    if (!departments.length && typeof syncDepartmentsFromDimensions_ === 'function') {
+      syncDepartmentsFromDimensions_(actor);
+      try {
+        departments = readSheetRecords_('DEPARTMENTS');
+      } catch (retryError) {
+        departments = [];
+      }
+    }
+    var fallbackDepartment =
+      (departments[0] && normalizeString_(departments[0]['Department Name'])) ||
+      (getDimensionValues_('Departments') || [])[0] ||
+      'General';
+    var schema = resolveSchema_('TEAMS');
+    var sheet = getSheetBySchema_(schema);
+    var existing = safeReadSheetRecords_(schema);
+    var existingNames = {};
+    existing.forEach(function (record) {
+      existingNames[normalizeString_(record['Team Name']).toLowerCase()] = true;
+    });
+    var created = [];
+    var now = new Date();
+    var actorId = actor && actor.userId ? actor.userId : 'system';
+    names.forEach(function (name) {
+      var teamName = normalizeString_(name);
+      if (!teamName || existingNames[teamName.toLowerCase()]) {
+        return;
+      }
+      var teamId = generateSequenceIdUnlocked_('TEM');
+      var record = {
+        'Team ID': teamId,
+        'Team Name': teamName,
+        Department: fallbackDepartment,
+        'Team Leader': '',
+        'Team Description': 'Imported from Settings → Dimensions.',
+        Status: 'Active',
+        'Created Date': now,
+        'Created By': actorId,
+        'Updated Date': now,
+        'Updated By': actorId
+      };
+      appendSheetRecord_(sheet, schema.columns, record);
+      existingNames[teamName.toLowerCase()] = true;
+      created.push(teamName);
+    });
+    return created;
+  });
 }

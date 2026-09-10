@@ -63,13 +63,40 @@
       return document.body.dataset.activePage || 'login';
     };
 
+    KSL.toShareableWebAppUrl = function (url) {
+      var raw = String(url || '').trim();
+      if (!raw) {
+        return '';
+      }
+
+      var match = raw.match(
+        /\/(?:a\/\*\/macros\/s|a\/macros\/[^/]+\/s|macros\/(?:u\/\d+\/)?s)\/([A-Za-z0-9_-]+)\/(exec|dev)\b/i
+      );
+      if (!match) {
+        match = raw.match(/\/macros\/s\/([A-Za-z0-9_-]+)\/(exec|dev)\b/i);
+      }
+      if (!match) {
+        return raw;
+      }
+
+      var deploymentId = match[1];
+      var kind = String(match[2] || 'exec').toLowerCase();
+      if (kind === 'dev') {
+        return 'https://script.google.com/macros/s/' + deploymentId + '/dev';
+      }
+
+      return 'https://script.google.com/a/*/macros/s/' + deploymentId + '/exec';
+    };
+
     KSL.getScriptUrl = function () {
-      return String((window.APP_TEMPLATE_STATE && window.APP_TEMPLATE_STATE.scriptUrl) || '').trim();
+      return KSL.toShareableWebAppUrl(
+        String((window.APP_TEMPLATE_STATE && window.APP_TEMPLATE_STATE.scriptUrl) || '').trim()
+      );
     };
 
     KSL.isEditorPreviewUrl = function () {
       var scriptUrl = KSL.getScriptUrl();
-      if (/\/macros\/s\/[^/]+\/exec/i.test(scriptUrl)) {
+      if (/\/macros\/s\/[^/]+\/exec/i.test(scriptUrl) || /\/a\/\*\/macros\/s\/[^/]+\/exec/i.test(scriptUrl)) {
         return false;
       }
       var href = String(window.location.href || '');
@@ -83,9 +110,11 @@
       }
 
       var href = String(window.location.href || '');
-      var match = href.match(/https:\/\/script\.google\.com\/macros\/s\/[^/]+\/(exec|dev)/i);
+      var match = href.match(
+        /https:\/\/script\.google\.com\/(?:a\/\*\/macros\/s|a\/macros\/[^/]+\/s|macros\/(?:u\/\d+\/)?s)\/[^/]+\/(exec|dev)/i
+      );
       if (match && match[0]) {
-        return match[0];
+        return KSL.toShareableWebAppUrl(match[0]);
       }
 
       return '';
@@ -156,7 +185,13 @@
       return Promise.resolve(src);
     };
 
-    KSL.displayRole = function (role) {
+    KSL.displayRole = function (role, extras) {
+      if (extras && extras.isSuperAdmin) {
+        return 'Super Admin';
+      }
+      if (extras && extras.displayRole) {
+        return extras.displayRole;
+      }
       var value = String(role || '').trim();
       if (value === 'Employee' || value === 'Staff') {
         return 'Staff';
@@ -182,11 +217,28 @@
       if (!select) {
         return;
       }
+      var list = people || [];
+      var nameCounts = {};
+      list.forEach(function (person) {
+        var name = String((person && person.fullName) || '')
+          .trim()
+          .toLowerCase();
+        if (name) {
+          nameCounts[name] = (nameCounts[name] || 0) + 1;
+        }
+      });
       var html = '<option value="">' + KSL.escapeHtml(placeholder || 'Select staff') + '</option>';
-      html += (people || [])
+      html += list
         .map(function (person) {
           var id = person.employeeId || person.staffId || '';
-          var label = (person.fullName || id) + (id ? ' (' + id + ')' : '');
+          var name = person.fullName || id;
+          var label = name;
+          if (person.department) {
+            label += ' · ' + person.department;
+          }
+          if (nameCounts[String(name).toLowerCase()] > 1 && id) {
+            label += ' · ' + id;
+          }
           var selected = selectedId && selectedId === id ? ' selected' : '';
           return (
             '<option value="' +
@@ -718,19 +770,487 @@
       }
     };
 
-    KSL.showToast = function (message, type) {
-      var host = document.getElementById('appToastHost');
-      if (!host) {
+    KSL._inflight = 0;
+    KSL._busyButton = null;
+    KSL._pendingBusyButton = null;
+    KSL._scheduledActions = [];
+    KSL._pdfPreviewPayload = null;
+    KSL._modalResolvers = {};
+
+    KSL.setButtonBusy = function (button, isBusy) {
+      if (!button) {
         return;
       }
+      if (isBusy) {
+        if (!button.dataset.idleHtml) {
+          button.dataset.idleHtml = button.innerHTML;
+        }
+        button.classList.add('is-busy');
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+      } else {
+        button.classList.remove('is-busy');
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+        if (button.dataset.idleHtml) {
+          button.innerHTML = button.dataset.idleHtml;
+        }
+      }
+    };
+
+    KSL.beginRequest = function () {
+      KSL._inflight += 1;
+      var bar = document.getElementById('appProgressBar');
+      if (bar) {
+        bar.classList.remove('hidden');
+      }
+      if (!KSL._busyButton && KSL._pendingBusyButton) {
+        KSL._busyButton = KSL._pendingBusyButton;
+        KSL.setButtonBusy(KSL._busyButton, true);
+      }
+    };
+
+    KSL.endRequest = function () {
+      KSL._inflight = Math.max(0, KSL._inflight - 1);
+      if (KSL._inflight > 0) {
+        return;
+      }
+      var bar = document.getElementById('appProgressBar');
+      if (bar) {
+        bar.classList.add('hidden');
+      }
+      if (KSL._busyButton) {
+        KSL.setButtonBusy(KSL._busyButton, false);
+        KSL._busyButton = null;
+      }
+      KSL._pendingBusyButton = null;
+    };
+
+    KSL.trackRequest = function (promise) {
+      KSL.beginRequest();
+      return Promise.resolve(promise).finally(function () {
+        KSL.endRequest();
+      });
+    };
+
+    KSL.popCallOptions_ = function (args) {
+      var options = { busy: false, silent: false };
+      if (
+        args.length &&
+        args[args.length - 1] &&
+        typeof args[args.length - 1] === 'object' &&
+        !Array.isArray(args[args.length - 1]) &&
+        (Object.prototype.hasOwnProperty.call(args[args.length - 1], 'busy') ||
+          Object.prototype.hasOwnProperty.call(args[args.length - 1], 'silent'))
+      ) {
+        var raw = args.pop();
+        options.busy = Boolean(raw.busy);
+        options.silent = Boolean(raw.silent);
+      }
+      return options;
+    };
+
+    KSL.showToast = function (message, type, options) {
+      var host = document.getElementById('appToastHost');
+      if (!host) {
+        return { dismiss: function () {} };
+      }
+      var opts = options || {};
       var toast = document.createElement('div');
       var normalizedType = type || 'info';
       toast.className = 'toast toast-' + normalizedType;
-      toast.textContent = message;
+      var text = document.createElement('span');
+      text.textContent = message;
+      toast.appendChild(text);
+      var dismissed = false;
+      var timer = window.setTimeout(function () {
+        if (!dismissed) {
+          toast.remove();
+          if (typeof opts.onTimeout === 'function') {
+            opts.onTimeout();
+          }
+        }
+      }, opts.duration || 4000);
+      if (opts.actionLabel && typeof opts.onAction === 'function') {
+        var action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'toast-action';
+        action.textContent = opts.actionLabel;
+        action.addEventListener('click', function () {
+          dismissed = true;
+          window.clearTimeout(timer);
+          toast.remove();
+          opts.onAction();
+        });
+        toast.appendChild(action);
+      }
       host.appendChild(toast);
+      return {
+        dismiss: function () {
+          dismissed = true;
+          window.clearTimeout(timer);
+          toast.remove();
+        }
+      };
+    };
+
+    KSL.scheduleAction = function (config) {
+      var settings = config || {};
+      var delayMs = Number(settings.delayMs || 5000);
+      var entry = {
+        cancelled: false,
+        timer: null,
+        run: settings.run,
+        onUndo: settings.onUndo
+      };
+      entry.timer = window.setTimeout(function () {
+        if (entry.cancelled) {
+          return;
+        }
+        KSL._scheduledActions = KSL._scheduledActions.filter(function (item) {
+          return item !== entry;
+        });
+        if (typeof entry.run === 'function') {
+          Promise.resolve(entry.run()).catch(function (error) {
+            KSL.showToast((error && error.message) || 'Action failed.', 'error');
+          });
+        }
+      }, delayMs);
+      KSL._scheduledActions.push(entry);
+      KSL.showToast(settings.message || 'Done. Undo?', settings.toastType || 'info', {
+        duration: delayMs,
+        actionLabel: settings.undoLabel || 'Undo',
+        onAction: function () {
+          entry.cancelled = true;
+          window.clearTimeout(entry.timer);
+          KSL._scheduledActions = KSL._scheduledActions.filter(function (item) {
+            return item !== entry;
+          });
+          if (typeof entry.onUndo === 'function') {
+            entry.onUndo();
+          }
+        }
+      });
+      return entry;
+    };
+
+    KSL.flushScheduledActions = function () {
+      var pending = KSL._scheduledActions.slice();
+      KSL._scheduledActions = [];
+      pending.forEach(function (entry) {
+        entry.cancelled = true;
+        window.clearTimeout(entry.timer);
+        if (typeof entry.run === 'function') {
+          Promise.resolve(entry.run()).catch(function () {
+            return null;
+          });
+        }
+      });
+    };
+
+    KSL.confirmModal = function (options) {
+      var opts = options || {};
+      var modal = document.getElementById('kslConfirmModal');
+      if (!modal) {
+        return Promise.resolve(window.confirm(opts.message || 'Continue?'));
+      }
+      document.getElementById('kslConfirmTitle').textContent = opts.title || 'Confirm';
+      document.getElementById('kslConfirmMessage').textContent = opts.message || 'Continue?';
+      var ok = document.getElementById('kslConfirmOk');
+      ok.textContent = opts.confirmLabel || 'Confirm';
+      ok.className = 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary');
+      KSL.openModal('kslConfirmModal');
+      return new Promise(function (resolve) {
+        KSL._modalResolvers.confirm = function (value) {
+          KSL.closeModal('kslConfirmModal');
+          resolve(Boolean(value));
+        };
+      });
+    };
+
+    KSL.promptModal = function (options) {
+      var opts = options || {};
+      var modal = document.getElementById('kslPromptModal');
+      var input = document.getElementById('kslPromptInput');
+      if (!modal || !input) {
+        var fallback = window.prompt(opts.message || '', opts.defaultValue || '');
+        return Promise.resolve(fallback);
+      }
+      document.getElementById('kslPromptTitle').textContent = opts.title || 'Enter a value';
+      document.getElementById('kslPromptMessage').textContent = opts.message || '';
+      document.getElementById('kslPromptLabel').textContent = opts.label || 'Value';
+      input.type = opts.inputType || 'text';
+      input.value = opts.defaultValue || '';
+      KSL.openModal('kslPromptModal');
       window.setTimeout(function () {
-        toast.remove();
-      }, 4000);
+        input.focus();
+        input.select();
+      }, 50);
+      return new Promise(function (resolve) {
+        KSL._modalResolvers.prompt = function (value) {
+          KSL.closeModal('kslPromptModal');
+          resolve(value);
+        };
+      });
+    };
+
+    KSL.confirmDelete = function (recordLabel) {
+      return KSL.confirmModal({
+        title: 'Delete',
+        message: 'Permanently delete "' + recordLabel + '"? You can undo for a few seconds.',
+        confirmLabel: 'Delete',
+        danger: true
+      });
+    };
+
+    KSL.openSidePanel = function (title, html) {
+      var panel = document.getElementById('kslSidePanel');
+      var titleEl = document.getElementById('kslSidePanelTitle');
+      var body = document.getElementById('kslSidePanelBody');
+      if (!panel || !body) {
+        return;
+      }
+      if (titleEl) {
+        titleEl.textContent = title || 'Details';
+      }
+      body.innerHTML = html || '';
+      panel.classList.remove('hidden');
+      panel.setAttribute('aria-hidden', 'false');
+    };
+
+    KSL.closeSidePanel = function () {
+      var panel = document.getElementById('kslSidePanel');
+      if (panel) {
+        panel.classList.add('hidden');
+        panel.setAttribute('aria-hidden', 'true');
+      }
+    };
+
+    KSL.validatePassword = function (value, minLength) {
+      var password = String(value || '');
+      var min = Math.max(6, Number(minLength || 8));
+      return {
+        minLength: password.length >= min,
+        upper: /[A-Z]/.test(password),
+        lower: /[a-z]/.test(password),
+        number: /[0-9]/.test(password),
+        min: min,
+        valid:
+          password.length >= min &&
+          /[A-Z]/.test(password) &&
+          /[a-z]/.test(password) &&
+          /[0-9]/.test(password)
+      };
+    };
+
+    KSL.renderPasswordHints = function (host, result) {
+      if (!host || !result) {
+        return;
+      }
+      host.innerHTML =
+        '<span class="' +
+        (result.minLength ? 'is-ok' : 'is-bad') +
+        '">' +
+        result.min +
+        '+ characters</span>' +
+        '<span class="' +
+        (result.upper ? 'is-ok' : 'is-bad') +
+        '">Uppercase</span>' +
+        '<span class="' +
+        (result.lower ? 'is-ok' : 'is-bad') +
+        '">Lowercase</span>' +
+        '<span class="' +
+        (result.number ? 'is-ok' : 'is-bad') +
+        '">Number</span>';
+    };
+
+    KSL.enhancePasswordField = function (inputId, hintsId) {
+      var input = document.getElementById(inputId);
+      if (!input || input.dataset.enhanced === '1') {
+        return;
+      }
+      input.dataset.enhanced = '1';
+      var wrap = document.createElement('div');
+      wrap.className = 'password-field';
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(input);
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'password-toggle';
+      toggle.setAttribute('aria-label', 'Show password');
+      toggle.innerHTML = '<i class="fa-solid fa-eye"></i>';
+      toggle.addEventListener('click', function () {
+        var hidden = input.type === 'password';
+        input.type = hidden ? 'text' : 'password';
+        toggle.setAttribute('aria-label', hidden ? 'Hide password' : 'Show password');
+        toggle.innerHTML = hidden
+          ? '<i class="fa-solid fa-eye-slash"></i>'
+          : '<i class="fa-solid fa-eye"></i>';
+      });
+      wrap.appendChild(toggle);
+      var hints = hintsId ? document.getElementById(hintsId) : null;
+      if (hints) {
+        input.addEventListener('input', function () {
+          KSL.renderPasswordHints(hints, KSL.validatePassword(input.value));
+        });
+        KSL.renderPasswordHints(hints, KSL.validatePassword(input.value));
+      }
+    };
+
+    KSL.roleBadgeClass = function (role, extras) {
+      var label = KSL.displayRole(role, extras);
+      if (label === 'Super Admin') {
+        return 'role-badge role-super';
+      }
+      if (label === 'Administrator') {
+        return 'role-badge role-admin';
+      }
+      if (label === 'Manager') {
+        return 'role-badge role-manager';
+      }
+      if (label === 'Supervisor') {
+        return 'role-badge role-supervisor';
+      }
+      if (label === 'Team Leader') {
+        return 'role-badge role-teamleader';
+      }
+      return 'role-badge role-staff';
+    };
+
+    KSL.roleBadgeHtml = function (role, extras) {
+      var label = KSL.displayRole(role, extras);
+      return (
+        '<span class="' +
+        KSL.roleBadgeClass(role, extras) +
+        '">' +
+        KSL.escapeHtml(label) +
+        '</span>'
+      );
+    };
+
+    KSL.youChipHtml = function () {
+      return '<span class="you-chip">You</span>';
+    };
+
+    KSL.readFiltersFromUrl = function (keys) {
+      var params = new URLSearchParams(window.location.search);
+      var out = {};
+      (keys || []).forEach(function (key) {
+        out[key] = params.get(key) || '';
+      });
+      return out;
+    };
+
+    KSL.replaceFiltersInUrl = function (map) {
+      var params = new URLSearchParams(window.location.search);
+      Object.keys(map || {}).forEach(function (key) {
+        var value = map[key];
+        if (value === '' || value === null || value === undefined) {
+          params.delete(key);
+        } else {
+          params.set(key, String(value));
+        }
+      });
+      var next = window.location.pathname + '?' + params.toString() + (window.location.hash || '');
+      try {
+        window.history.replaceState(null, '', next);
+      } catch (error) {
+        return;
+      }
+    };
+
+    KSL.applyFiltersFromUrl = function (fieldMap) {
+      var values = KSL.readFiltersFromUrl(Object.keys(fieldMap || {}));
+      Object.keys(fieldMap || {}).forEach(function (key) {
+        var el = document.getElementById(fieldMap[key]);
+        if (el && values[key]) {
+          el.value = values[key];
+        }
+      });
+      return values;
+    };
+
+    KSL.stampTableLabels = function () {
+      document.querySelectorAll('.table-wrap table').forEach(function (table) {
+        var headers = [];
+        table.querySelectorAll('thead th').forEach(function (th) {
+          headers.push(String(th.textContent || '').trim());
+        });
+        table.querySelectorAll('tbody tr').forEach(function (tr) {
+          tr.querySelectorAll('td').forEach(function (td, index) {
+            if (headers[index] && !td.getAttribute('data-label')) {
+              td.setAttribute('data-label', headers[index]);
+            }
+          });
+        });
+      });
+    };
+
+    KSL.setSidebarOpen = function (open) {
+      document.body.classList.toggle('sidebar-open', Boolean(open));
+      var toggle = document.getElementById('sidebarToggle');
+      if (toggle) {
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      }
+    };
+
+    KSL.promptPassword = function (defaults) {
+      var opts = defaults || {};
+      var modal = document.getElementById('kslPasswordModal');
+      var username = document.getElementById('kslPasswordUsername');
+      var password = document.getElementById('kslPasswordValue');
+      var confirm = document.getElementById('kslPasswordConfirm');
+      if (!modal || !username || !password) {
+        return Promise.resolve(null);
+      }
+      username.value = opts.username || '';
+      password.value = '';
+      if (confirm) {
+        confirm.value = '';
+      }
+      KSL.renderPasswordHints(
+        document.getElementById('kslPasswordHints'),
+        KSL.validatePassword('')
+      );
+      KSL.openModal('kslPasswordModal');
+      return new Promise(function (resolve) {
+        KSL._modalResolvers.password = resolve;
+      });
+    };
+
+    KSL.previewOrDownloadFile = function (payload) {
+      if (!payload || !payload.base64) {
+        throw new Error('No file data was returned.');
+      }
+      var mime = String(payload.mimeType || '');
+      var isPdf = mime.indexOf('pdf') > -1 || /\.pdf$/i.test(payload.fileName || '');
+      if (!isPdf) {
+        KSL.downloadFile(payload);
+        return;
+      }
+      KSL._pdfPreviewPayload = payload;
+      var frame = document.getElementById('kslPdfPreviewFrame');
+      var title = document.getElementById('kslPdfPreviewTitle');
+      if (!frame || !document.getElementById('kslPdfPreviewModal')) {
+        KSL.downloadFile(payload);
+        return;
+      }
+      if (title) {
+        title.textContent = payload.fileName || 'PDF preview';
+      }
+      try {
+        var binary = window.atob(payload.base64);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        var blob = new Blob([bytes], { type: 'application/pdf' });
+        frame.src = URL.createObjectURL(blob);
+        KSL.openModal('kslPdfPreviewModal');
+      } catch (error) {
+        KSL.downloadFile(payload);
+        KSL.showToast('Preview was blocked. The file was downloaded instead.', 'info');
+      }
     };
 
     KSL.statusClass = function (statusValue) {
@@ -767,6 +1287,7 @@
     };
 
     KSL.navigate = function (page, extraQuery) {
+      KSL.flushScheduledActions();
       var params = new URLSearchParams();
       if (page) {
         params.set('page', page);
@@ -822,7 +1343,7 @@
         userNameElement.textContent = user.fullName || 'Unknown User';
       }
       if (userRoleElement) {
-        userRoleElement.textContent = KSL.displayRole(role) || '-';
+        userRoleElement.innerHTML = KSL.roleBadgeHtml(role, user);
       }
       if (userAvatarElement) {
         userAvatarElement.src =
@@ -861,7 +1382,7 @@
         if (!token || KSL.getActivePage() === 'login') {
           return;
         }
-        KSL.call('getUnreadNotificationCount', token)
+        KSL.call('getUnreadNotificationCount', token, { silent: true })
           .then(function (response) {
             if (!response || !response.success) {
               return;
@@ -879,10 +1400,6 @@
 
     KSL.isAdministrator = function () {
       return String((KSL.state.currentUser && KSL.state.currentUser.role) || '') === 'Administrator';
-    };
-
-    KSL.confirmDelete = function (recordLabel) {
-      return window.confirm('Permanently delete "' + recordLabel + '"? This cannot be undone.');
     };
 
     KSL.requireAuth = function (requiredRoles, onReady) {
@@ -1123,37 +1640,120 @@
       var timer = window.setTimeout(function () {
         shown = true;
         KSL.showProcessing();
-      }, 600);
-      return KSL.runServer.apply(null, [functionName].concat(args)).finally(function () {
-        window.clearTimeout(timer);
-        if (shown) {
-          KSL.hideProcessing();
-        }
-      });
+      }, 150);
+      return KSL.trackRequest(
+        KSL.runServer.apply(null, [functionName].concat(args)).finally(function () {
+          window.clearTimeout(timer);
+          if (shown) {
+            KSL.hideProcessing();
+          }
+        })
+      );
     };
 
     KSL.call = function (functionName) {
       var args = Array.prototype.slice.call(arguments, 1);
-      var options = {};
-      if (
-        args.length &&
-        args[args.length - 1] &&
-        typeof args[args.length - 1] === 'object' &&
-        args[args.length - 1].busy === true &&
-        Object.keys(args[args.length - 1]).length === 1
-      ) {
-        options = args.pop();
-      }
+      var options = KSL.popCallOptions_(args);
       if (options.busy) {
         return KSL.callBusy.apply(null, [functionName].concat(args));
       }
-      return KSL.runServer.apply(null, [functionName].concat(args));
+      var request = KSL.runServer.apply(null, [functionName].concat(args));
+      if (options.silent) {
+        return request;
+      }
+      return KSL.trackRequest(request);
     };
+
+    function closeConfirm_(value) {
+      if (KSL._modalResolvers.confirm) {
+        var resolve = KSL._modalResolvers.confirm;
+        KSL._modalResolvers.confirm = null;
+        resolve(value);
+      } else {
+        KSL.closeModal('kslConfirmModal');
+      }
+    }
+
+    function closePrompt_(value) {
+      if (KSL._modalResolvers.prompt) {
+        var resolve = KSL._modalResolvers.prompt;
+        KSL._modalResolvers.prompt = null;
+        resolve(value);
+      } else {
+        KSL.closeModal('kslPromptModal');
+      }
+    }
+
+    KSL.toggleNotificationDropdown = function (force) {
+      var dropdown = document.getElementById('notificationDropdown');
+      var button = document.getElementById('notificationButton');
+      if (!dropdown) {
+        return;
+      }
+      var open = typeof force === 'boolean' ? force : dropdown.classList.contains('hidden');
+      dropdown.classList.toggle('hidden', !open);
+      if (button) {
+        button.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      if (open) {
+        KSL.loadNotificationDropdown();
+      }
+    };
+
+    KSL.loadNotificationDropdown = function () {
+      var list = document.getElementById('notificationDropdownList');
+      if (!list) {
+        return;
+      }
+      list.innerHTML = '<p class="page-note">Loading...</p>';
+      KSL.call('listNotifications', KSL.getSessionToken(), { unreadOnly: true, page: 1, pageSize: 8 })
+        .then(function (response) {
+          if (!response || !response.success) {
+            throw new Error((response && response.message) || 'Unable to load notifications.');
+          }
+          var items = ((response.data || {}).items) || [];
+          if (!items.length) {
+            list.innerHTML = '<p class="page-note">No unread notifications.</p>';
+            return;
+          }
+          list.innerHTML = items
+            .map(function (item) {
+              return (
+                '<button class="notification-item" type="button" data-notification-id="' +
+                KSL.escapeHtml(item.notificationId) +
+                '" data-task-id="' +
+                KSL.escapeHtml(item.relatedTaskId || '') +
+                '"><strong>' +
+                KSL.escapeHtml(item.title || 'Notification') +
+                '</strong><span>' +
+                KSL.escapeHtml(item.message || '') +
+                '</span></button>'
+              );
+            })
+            .join('');
+        })
+        .catch(function (error) {
+          list.innerHTML =
+            '<p class="page-note">' + KSL.escapeHtml(error.message || 'Unable to load notifications.') + '</p>';
+        });
+    };
+
+    document.addEventListener(
+      'click',
+      function (event) {
+        var btn = event.target.closest('.btn, .action-menu-item');
+        if (btn && !btn.disabled && !btn.classList.contains('password-toggle')) {
+          KSL._pendingBusyButton = btn;
+        }
+      },
+      true
+    );
 
     document.addEventListener('click', function (event) {
       var navLink = event.target.closest('a.nav-link[data-page]');
       if (navLink) {
         event.preventDefault();
+        KSL.setSidebarOpen(false);
         KSL.navigate(navLink.getAttribute('data-page'));
         return;
       }
@@ -1166,10 +1766,138 @@
 
     document.addEventListener('DOMContentLoaded', function () {
       KSL.loadLogo();
+      document.addEventListener('click', function () {
+        window.setTimeout(KSL.stampTableLabels, 0);
+      });
+      var observerTarget = document.querySelector('.content-area') || document.body;
+      if (window.MutationObserver && observerTarget) {
+        new MutationObserver(function () {
+          KSL.stampTableLabels();
+        }).observe(observerTarget, { childList: true, subtree: true });
+      }
+      var sidebarToggle = document.getElementById('sidebarToggle');
+      var sidebarBackdrop = document.getElementById('sidebarBackdrop');
+      if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', function () {
+          KSL.setSidebarOpen(!document.body.classList.contains('sidebar-open'));
+        });
+      }
+      if (sidebarBackdrop) {
+        sidebarBackdrop.hidden = false;
+        sidebarBackdrop.addEventListener('click', function () {
+          KSL.setSidebarOpen(false);
+        });
+      }
+      var confirmOk = document.getElementById('kslConfirmOk');
+      var confirmCancel = document.getElementById('kslConfirmCancel');
+      var confirmClose = document.getElementById('kslConfirmClose');
+      if (confirmOk) {
+        confirmOk.addEventListener('click', function () {
+          closeConfirm_(true);
+        });
+      }
+      [confirmCancel, confirmClose].forEach(function (el) {
+        if (el) {
+          el.addEventListener('click', function () {
+            closeConfirm_(false);
+          });
+        }
+      });
+      var promptOk = document.getElementById('kslPromptOk');
+      var promptCancel = document.getElementById('kslPromptCancel');
+      var promptClose = document.getElementById('kslPromptClose');
+      var promptInput = document.getElementById('kslPromptInput');
+      if (promptOk) {
+        promptOk.addEventListener('click', function () {
+          closePrompt_(promptInput ? promptInput.value : '');
+        });
+      }
+      [promptCancel, promptClose].forEach(function (el) {
+        if (el) {
+          el.addEventListener('click', function () {
+            closePrompt_(null);
+          });
+        }
+      });
+      if (promptInput) {
+        promptInput.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            closePrompt_(promptInput.value);
+          }
+        });
+      }
+      var passwordForm = document.getElementById('kslPasswordForm');
+      var passwordCancel = document.getElementById('kslPasswordCancel');
+      var passwordClose = document.getElementById('kslPasswordClose');
+      function finishPassword_(value) {
+        if (KSL._modalResolvers.password) {
+          var resolve = KSL._modalResolvers.password;
+          KSL._modalResolvers.password = null;
+          KSL.closeModal('kslPasswordModal');
+          resolve(value);
+        } else {
+          KSL.closeModal('kslPasswordModal');
+        }
+      }
+      if (passwordForm) {
+        passwordForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var username = document.getElementById('kslPasswordUsername').value.trim();
+          var password = document.getElementById('kslPasswordValue').value;
+          var confirm = document.getElementById('kslPasswordConfirm').value;
+          var check = KSL.validatePassword(password);
+          if (!username) {
+            KSL.showToast('Username is required.', 'error');
+            return;
+          }
+          if (!check.valid) {
+            KSL.showToast('Password must include ' + check.min + '+ characters, uppercase, lowercase, and a number.', 'error');
+            return;
+          }
+          if (password !== confirm) {
+            KSL.showToast('Passwords do not match.', 'error');
+            return;
+          }
+          finishPassword_({ username: username, password: password });
+        });
+      }
+      [passwordCancel, passwordClose].forEach(function (el) {
+        if (el) {
+          el.addEventListener('click', function () {
+            finishPassword_(null);
+          });
+        }
+      });
+      var sideClose = document.getElementById('kslSidePanelClose');
+      if (sideClose) {
+        sideClose.addEventListener('click', KSL.closeSidePanel);
+      }
+      var pdfClose = document.getElementById('kslPdfPreviewClose');
+      var pdfCloseFooter = document.getElementById('kslPdfPreviewCloseFooter');
+      var pdfDownload = document.getElementById('kslPdfPreviewDownload');
+      [pdfClose, pdfCloseFooter].forEach(function (el) {
+        if (el) {
+          el.addEventListener('click', function () {
+            KSL.closeModal('kslPdfPreviewModal');
+          });
+        }
+      });
+      if (pdfDownload) {
+        pdfDownload.addEventListener('click', function () {
+          if (KSL._pdfPreviewPayload) {
+            KSL.downloadFile(KSL._pdfPreviewPayload);
+          }
+        });
+      }
+      window.addEventListener('beforeunload', function () {
+        KSL.flushScheduledActions();
+      });
       var logoutButton = document.getElementById('logoutButton');
       if (logoutButton) {
         logoutButton.addEventListener('click', function () {
           var token = KSL.getSessionToken();
+          KSL.flushScheduledActions();
           KSL.showProcessing('Signing out...');
           KSL.call('logoutSession', token)
             .catch(function () {
@@ -1182,11 +1910,48 @@
         });
       }
       var notificationButton = document.getElementById('notificationButton');
+      var notificationViewAll = document.getElementById('notificationViewAll');
+      var notificationList = document.getElementById('notificationDropdownList');
       if (notificationButton) {
-        notificationButton.addEventListener('click', function () {
+        notificationButton.addEventListener('click', function (event) {
+          event.stopPropagation();
+          KSL.toggleNotificationDropdown();
+        });
+      }
+      if (notificationViewAll) {
+        notificationViewAll.addEventListener('click', function () {
           KSL.navigate('notifications');
         });
       }
+      if (notificationList) {
+        notificationList.addEventListener('click', function (event) {
+          var item = event.target.closest('.notification-item');
+          if (!item) {
+            return;
+          }
+          var id = item.getAttribute('data-notification-id');
+          var taskId = item.getAttribute('data-task-id');
+          if (id) {
+            KSL.call('markNotificationRead', KSL.getSessionToken(), { notificationId: id }).catch(function () {
+              return null;
+            });
+          }
+          KSL.toggleNotificationDropdown(false);
+          if (taskId) {
+            KSL.navigate('mytasks', 'taskId=' + encodeURIComponent(taskId));
+          } else {
+            KSL.navigate('notifications');
+          }
+        });
+      }
+      document.addEventListener('click', function (event) {
+        if (!event.target.closest('.notification-wrap')) {
+          KSL.toggleNotificationDropdown(false);
+        }
+      });
+      KSL.enhancePasswordField('loginPasswordInput');
+      KSL.enhancePasswordField('newUserPassword', 'newUserPasswordHints');
+      KSL.enhancePasswordField('kslPasswordValue', 'kslPasswordHints');
       if (KSL.getActivePage() !== 'login') {
         var cachedRole = readStoredRole_();
         if (cachedRole) {

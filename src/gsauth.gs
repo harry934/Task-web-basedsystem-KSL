@@ -167,7 +167,7 @@ function splitNameParts_(fullName) {
 function buildInactiveStatusMessage_(accountStatus) {
   var status = normalizeString_(accountStatus).toLowerCase();
   if (status === 'pending approval') {
-    return 'Your account is pending administrator approval.';
+    return 'Your account is not active. Contact an administrator.';
   }
   if (status === 'suspended') {
     return 'Your account is suspended. Contact an administrator.';

@@ -88,7 +88,7 @@
       options.format = format;
       KSL.callBusy('exportMonthlyProgress', KSL.getSessionToken(), options).then(function (response) {
         if (!response || !response.success) throw new Error((response && response.message) || 'Export failed.');
-        KSL.downloadFile(response.data);
+        KSL.previewOrDownloadFile(response.data);
         KSL.showToast('Report generated.', 'success');
       }).catch(function (error) { KSL.showToast(error.message || 'Export failed.', 'error'); });
     }
@@ -117,14 +117,33 @@
         document.getElementById('monthTableBody').addEventListener('click', function (event) {
           var button = event.target.closest('button[data-id]');
           if (!button) return;
-          var supervisorComments = window.prompt('Supervisor comments:', '') || '';
-          var managementComments = window.prompt('Management comments (managers/admins):', '') || '';
-          KSL.call('reviewMonthlyProgress', KSL.getSessionToken(), {
-            recordId: button.dataset.id,
-            supervisorComments: supervisorComments,
-            managementComments: managementComments
+          KSL.promptModal({
+            title: 'Supervisor comments',
+            label: 'Comments',
+            defaultValue: ''
+          }).then(function (supervisorComments) {
+            if (supervisorComments === null) {
+              return;
+            }
+            return KSL.promptModal({
+              title: 'Management comments',
+              label: 'Comments',
+              defaultValue: ''
+            }).then(function (managementComments) {
+              if (managementComments === null) {
+                return;
+              }
+              return KSL.call('reviewMonthlyProgress', KSL.getSessionToken(), {
+                recordId: button.dataset.id,
+                supervisorComments: supervisorComments || '',
+                managementComments: managementComments || ''
+              });
+            });
           }).then(function (response) {
-            if (!response || !response.success) throw new Error((response && response.message) || 'Review failed.');
+            if (!response) {
+              return;
+            }
+            if (!response.success) throw new Error((response && response.message) || 'Review failed.');
             KSL.showToast('Review saved.', 'success');
             load();
           }).catch(function (error) { KSL.showToast(error.message || 'Review failed.', 'error'); });

@@ -1,7 +1,11 @@
 <section class="page-shell">
   <div class="page-header">
     <h1>User Management</h1>
-    <p>Login accounts for staff. Create staff records first, then issue a username here.</p>
+    <p>
+      Issue a login after the person exists on Staff. Login UID and Staff UID are generated automatically.
+      The Super Admin account is permanent and cannot be edited, suspended, or deleted. Only the Super Admin
+      can recruit another administrator or transfer ownership.
+    </p>
   </div>
 
   <div class="card">
@@ -9,10 +13,11 @@
       <div class="toolbar-left">
         <button id="newUserButton" class="btn btn-primary" type="button">New User</button>
         <button id="usersRefreshButton" class="btn btn-outline" type="button">Refresh</button>
-        <button id="usersPendingButton" class="btn btn-outline" type="button">Approval queue</button>
+        <button id="usersActivateSelected" class="btn btn-outline" type="button">Activate selected</button>
+        <button id="usersSuspendSelected" class="btn btn-outline" type="button">Suspend selected</button>
       </div>
       <div class="toolbar-right">
-        <input id="usersSearchInput" class="input" type="search" placeholder="Search users..." style="min-width: 220px;">
+        <input id="usersSearchInput" class="input" type="search" placeholder="Search name, username, role, Staff UID..." style="min-width: 260px;">
         <select id="usersRoleFilter" class="select" style="min-width: 150px;">
           <option value="">All roles</option>
         </select>
@@ -23,43 +28,24 @@
     </div>
   </div>
 
-  <div id="approvalQueue" class="card approval-queue hidden">
-    <strong>Approval queue</strong>
-    <div class="table-wrap" style="margin-top: 10px;">
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="approvalQueueBody">
-          <tr><td colspan="5" class="empty-state">No pending accounts.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
   <div class="table-wrap">
-    <table>
+    <table class="users-table">
       <thead>
         <tr>
+          <th class="row-check"><input id="usersSelectAll" type="checkbox" aria-label="Select all"></th>
           <th>Username</th>
           <th>Name</th>
           <th>Email</th>
           <th>Role</th>
+          <th>Staff member</th>
           <th>Status</th>
-          <th>Department</th>
           <th>Last Login</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="usersTableBody">
         <tr>
-          <td colspan="8" class="empty-state">Loading users...</td>
+          <td colspan="9" class="empty-state">Loading users...</td>
         </tr>
       </tbody>
     </table>
@@ -76,6 +62,19 @@
     </div>
     <form id="newUserForm">
       <div class="form-grid">
+        <div class="field full">
+          <label for="newUserStaffMember">Staff member</label>
+          <select id="newUserStaffMember" class="select"></select>
+          <span class="page-note">Required except for Administrator. Create them on Staff first, then pick their name.</span>
+        </div>
+        <div class="field">
+          <label for="newUserStaffUid">Staff UID</label>
+          <input id="newUserStaffUid" class="input" type="text" readonly placeholder="Filled from the staff member">
+        </div>
+        <div class="field">
+          <label for="newUserIdPreview">Login UID</label>
+          <input id="newUserIdPreview" class="input" type="text" readonly>
+        </div>
         <div class="field">
           <label for="newUserFullName">Full name</label>
           <input id="newUserFullName" class="input" type="text" required>
@@ -91,37 +90,11 @@
         <div class="field">
           <label for="newUserPassword">Password</label>
           <input id="newUserPassword" class="input" type="password" required>
+          <div id="newUserPasswordHints" class="password-hints"></div>
         </div>
         <div class="field">
           <label for="newUserRole">Role</label>
           <select id="newUserRole" class="select" required></select>
-        </div>
-        <div class="field">
-          <label for="newUserIdPreview">User UID</label>
-          <input id="newUserIdPreview" class="input" type="text" readonly>
-        </div>
-        <div class="field">
-          <label for="newUserEmployeeId">Staff UID</label>
-          <select id="newUserEmployeeId" class="select"></select>
-        </div>
-        <div class="field">
-          <label for="newUserDepartment">Department</label>
-          <input id="newUserDepartment" class="input" type="text">
-        </div>
-        <div class="field">
-          <label for="newUserJobTitle">Job title</label>
-          <input id="newUserJobTitle" class="input" type="text">
-        </div>
-        <div class="field">
-          <label for="newUserSupervisorId">Supervisor</label>
-          <select id="newUserSupervisorId" class="select"></select>
-        </div>
-        <div class="field">
-          <label for="newUserStatus">Account status</label>
-          <select id="newUserStatus" class="select">
-            <option value="Active">Active</option>
-            <option value="Pending Approval">Pending Approval</option>
-          </select>
         </div>
       </div>
       <div class="modal-footer">
@@ -132,59 +105,15 @@
   </div>
 </div>
 
-<div id="userApprovalModalBackdrop" class="modal-backdrop hidden">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>Approve User Account</h3>
-      <button class="btn btn-outline" type="button" data-close-modal="userApprovalModalBackdrop">
-        <i class="fa-solid fa-xmark"></i>
-        Close
-      </button>
-    </div>
-
-    <form id="userApprovalForm">
-      <input id="approvalUserId" type="hidden">
-      <div class="form-grid">
-        <div class="field">
-          <label for="approvalEmployeeId">Staff UID</label>
-          <select id="approvalEmployeeId" class="select" required></select>
-        </div>
-        <div class="field">
-          <label for="approvalDepartment">Department</label>
-          <input id="approvalDepartment" class="input" type="text" required>
-        </div>
-        <div class="field">
-          <label for="approvalJobTitle">Job Title</label>
-          <input id="approvalJobTitle" class="input" type="text" required>
-        </div>
-        <div class="field">
-          <label for="approvalRole">Role</label>
-          <select id="approvalRole" class="select" required></select>
-        </div>
-        <div class="field">
-          <label for="approvalSupervisorId">Supervisor</label>
-          <select id="approvalSupervisorId" class="select"></select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" type="button" data-close-modal="userApprovalModalBackdrop">Cancel</button>
-        <button class="btn btn-primary" type="submit">
-          <i class="fa-solid fa-check-circle"></i>
-          Approve User
-        </button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <script>
   (function () {
     var state = {
       users: [],
-      pending: [],
+      staff: [],
       page: 1,
       pageSize: 25,
-      pages: 1
+      pages: 1,
+      viewerIsSuperAdmin: false
     };
 
     function getFilters() {
@@ -212,14 +141,74 @@
         });
     }
 
-    function loadStaffSelects(selectedStaffId, selectedSupervisorId) {
-      return KSL.call('listStaffOptions', KSL.getSessionToken()).then(function (response) {
+    function withoutPendingStatus(values) {
+      return (values || []).filter(function (value) {
+        var normalized = String(value || '').toLowerCase();
+        return normalized !== 'pending approval' && normalized !== 'pending';
+      });
+    }
+
+    function staffNameForUser(user) {
+      var employeeId = user && user.employeeId ? user.employeeId : '';
+      if (!employeeId) {
+        return '—';
+      }
+      var person = (state.staff || []).find(function (item) {
+        return (item.employeeId || item.staffId) === employeeId;
+      });
+      if (person && person.fullName) {
+        return person.fullName;
+      }
+      return employeeId;
+    }
+
+    function suggestUsernameFromPerson(person) {
+      var email = person && person.email ? String(person.email) : '';
+      if (email.indexOf('@') > 0) {
+        return email
+          .split('@')[0]
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]/g, '');
+      }
+      var name = person && person.fullName ? String(person.fullName) : '';
+      return name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '.')
+        .replace(/^\.+|\.+$/g, '');
+    }
+
+    function applySelectedStaff() {
+      var select = document.getElementById('newUserStaffMember');
+      var staffUid = document.getElementById('newUserStaffUid');
+      var id = select ? select.value : '';
+      var person = (state.staff || []).find(function (item) {
+        return (item.employeeId || item.staffId) === id;
+      });
+      staffUid.value = person ? person.employeeId || person.staffId || '' : '';
+      if (!person) {
+        return;
+      }
+      if (person.fullName) {
+        document.getElementById('newUserFullName').value = person.fullName;
+      }
+      if (person.email) {
+        document.getElementById('newUserEmail').value = person.email;
+      }
+      var usernameInput = document.getElementById('newUserUsername');
+      if (usernameInput && !usernameInput.value.trim()) {
+        usernameInput.value = suggestUsernameFromPerson(person);
+      }
+    }
+
+    function loadStaffSelects(selectedStaffId) {
+      return KSL.call('listEmployees', KSL.getSessionToken(), {
+        status: 'Active',
+        page: 1,
+        pageSize: 1000
+      }).then(function (response) {
         var people = (response && response.data && response.data.items) || [];
         state.staff = people;
-        KSL.fillStaffSelect('newUserEmployeeId', people, 'Select staff', selectedStaffId || '');
-        KSL.fillStaffSelect('newUserSupervisorId', people, 'Select supervisor', selectedSupervisorId || '');
-        KSL.fillStaffSelect('approvalEmployeeId', people, 'Select staff', selectedStaffId || '');
-        KSL.fillStaffSelect('approvalSupervisorId', people, 'Select supervisor', selectedSupervisorId || '');
+        KSL.fillStaffSelect('newUserStaffMember', people, 'Select staff member', selectedStaffId || '');
         return people;
       });
     }
@@ -236,6 +225,140 @@
       select.innerHTML = existingPlaceholder + options.join('');
     }
 
+    function viewerIsSuperAdmin() {
+      return Boolean(
+        state.viewerIsSuperAdmin ||
+          (KSL.state.currentUser && KSL.state.currentUser.isSuperAdmin)
+      );
+    }
+
+    function rolesForNewUser(roles) {
+      var list = staffRoleValues(roles);
+      if (!viewerIsSuperAdmin()) {
+        list = list.filter(function (role) {
+          return role !== 'Administrator';
+        });
+      }
+      return list;
+    }
+
+    function rolesForFilter(roles) {
+      var list = staffRoleValues(roles);
+      if (list.indexOf('Super Admin') === -1) {
+        list = ['Super Admin'].concat(list);
+      }
+      return list;
+    }
+
+    function actionButton(label, attrs, danger) {
+      return (
+        '<button class="action-menu-item' +
+        (danger ? ' action-menu-danger' : '') +
+        '" type="button" ' +
+        attrs +
+        '>' +
+        KSL.escapeHtml(label) +
+        '</button>'
+      );
+    }
+
+    function buildUserActions(user) {
+      var menuItems = [];
+      var userIdAttr = 'data-user-id="' + KSL.escapeHtml(user.userId) + '"';
+      if (user.canSetPassword) {
+        menuItems.push(actionButton('Set password', 'data-action="password" ' + userIdAttr));
+      }
+      if (user.canChangeStatus) {
+        menuItems.push(actionButton('Activate', 'data-action="status" data-status="Active" ' + userIdAttr));
+        menuItems.push(actionButton('Suspend', 'data-action="status" data-status="Suspended" ' + userIdAttr));
+        menuItems.push(actionButton('Disable', 'data-action="status" data-status="Disabled" ' + userIdAttr));
+      }
+      if (user.canPromoteAdmin) {
+        menuItems.push(actionButton('Make administrator', 'data-action="promote" ' + userIdAttr));
+      }
+      if (user.canDemoteAdmin) {
+        menuItems.push(actionButton('Demote from administrator', 'data-action="demote" ' + userIdAttr));
+      }
+      if (user.canTransferOwnership) {
+        menuItems.push(actionButton('Make Super Admin', 'data-action="transfer" ' + userIdAttr));
+      }
+      if (user.canDelete) {
+        menuItems.push(
+          actionButton(
+            'Delete',
+            'data-action="delete" ' +
+              userIdAttr +
+              ' data-name="' +
+              KSL.escapeHtml(user.fullName || user.username || user.userId) +
+              '"',
+            true
+          )
+        );
+      }
+      if (menuItems.length) {
+        return (
+          '<div class="action-menu">' +
+          '<button class="btn btn-outline action-menu-toggle" type="button" aria-haspopup="true">Actions</button>' +
+          '<div class="action-menu-list hidden">' +
+          menuItems.join('') +
+          '</div></div>'
+        );
+      }
+      if (user.isSelf) {
+        return '<span class="page-note">This is you</span>';
+      }
+      if (user.isSuperAdmin) {
+        return '<span class="page-note">Permanent</span>';
+      }
+      return '<span class="page-note">—</span>';
+    }
+
+    function openUserPanel(user) {
+      if (!user) {
+        return;
+      }
+      var html =
+        '<dl>' +
+        '<div class="side-panel-row"><dt>Username</dt><dd>' +
+        KSL.escapeHtml(user.username || '-') +
+        '</dd></div>' +
+        '<div class="side-panel-row"><dt>Name</dt><dd>' +
+        KSL.escapeHtml(user.fullName || '-') +
+        (user.isSelf ? ' ' + KSL.youChipHtml() : '') +
+        '</dd></div>' +
+        '<div class="side-panel-row"><dt>Email</dt><dd>' +
+        KSL.escapeHtml(user.email || '-') +
+        '</dd></div>' +
+        '<div class="side-panel-row"><dt>Role</dt><dd>' +
+        KSL.roleBadgeHtml(user.role, user) +
+        '</dd></div>' +
+        '<div class="side-panel-row"><dt>Staff UID</dt><dd>' +
+        KSL.escapeHtml(user.employeeId || '-') +
+        '</dd></div>' +
+        '<div class="side-panel-row"><dt>Staff member</dt><dd>' +
+        KSL.escapeHtml(staffNameForUser(user)) +
+        '</dd></div>' +
+        '<div class="side-panel-row"><dt>Status</dt><dd>' +
+        KSL.escapeHtml(user.accountStatus || '-') +
+        '</dd></div>' +
+        '<div class="side-panel-row"><dt>Last login</dt><dd>' +
+        KSL.escapeHtml(KSL.formatDate(user.lastLogin) || '-') +
+        '</dd></div>' +
+        '</dl>' +
+        '<div class="toolbar-left" style="margin-top:16px;">' +
+        buildUserActions(user) +
+        '</div>';
+      KSL.openSidePanel(user.fullName || user.username || 'User', html);
+    }
+
+    function selectedUserIds() {
+      return Array.prototype.map
+        .call(document.querySelectorAll('.user-row-check:checked'), function (box) {
+          return box.value;
+        })
+        .filter(Boolean);
+    }
+
     function renderUsersTable() {
       var body = document.getElementById('usersTableBody');
       if (!body) {
@@ -243,62 +366,42 @@
       }
 
       if (!state.users.length) {
-        body.innerHTML = '<tr><td colspan="8" class="empty-state"><i class="fa-solid fa-users"></i><p>No users found.</p></td></tr>';
+        body.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fa-solid fa-users"></i><p>No users found.</p></td></tr>';
         return;
       }
 
       body.innerHTML = state.users
         .map(function (user) {
           var statusClass = KSL.statusClass(user.accountStatus);
-          var menuItems = [];
-          if ((user.accountStatus || '').toLowerCase() === 'pending approval') {
-            menuItems.push(
-              '<button class="action-menu-item" type="button" data-action="approve" data-user-id="' +
-                KSL.escapeHtml(user.userId) +
-                '">Approve</button>'
-            );
-          }
-          menuItems.push(
-            '<button class="action-menu-item" type="button" data-action="password" data-user-id="' +
-              KSL.escapeHtml(user.userId) +
-              '">Set password</button>'
-          );
-          menuItems.push(
-            '<button class="action-menu-item" type="button" data-action="status" data-status="Active" data-user-id="' +
-              KSL.escapeHtml(user.userId) +
-              '">Activate</button>'
-          );
-          menuItems.push(
-            '<button class="action-menu-item" type="button" data-action="status" data-status="Suspended" data-user-id="' +
-              KSL.escapeHtml(user.userId) +
-              '">Suspend</button>'
-          );
-          menuItems.push(
-            '<button class="action-menu-item" type="button" data-action="status" data-status="Disabled" data-user-id="' +
-              KSL.escapeHtml(user.userId) +
-              '">Disable</button>'
-          );
-          menuItems.push(
-            '<button class="action-menu-item action-menu-danger" type="button" data-action="delete" data-user-id="' +
-              KSL.escapeHtml(user.userId) +
-              '" data-name="' +
-              KSL.escapeHtml(user.fullName || user.username || user.userId) +
-              '">Delete</button>'
-          );
-
+          var canSelect = user.canChangeStatus;
           return (
-            '<tr>' +
+            '<tr class="' +
+            (user.isSelf ? 'is-self' : '') +
+            '" data-open-user="' +
+            KSL.escapeHtml(user.userId) +
+            '">' +
+            '<td class="row-check">' +
+            (canSelect
+              ? '<input class="user-row-check" type="checkbox" value="' +
+                KSL.escapeHtml(user.userId) +
+                '" aria-label="Select user">'
+              : '') +
+            '</td>' +
             '<td>' +
             KSL.escapeHtml(user.username || '-') +
             '</td>' +
             '<td>' +
             KSL.escapeHtml(user.fullName) +
+            (user.isSelf ? ' ' + KSL.youChipHtml() : '') +
             '</td>' +
             '<td>' +
             KSL.escapeHtml(user.email) +
             '</td>' +
             '<td>' +
-            KSL.escapeHtml(KSL.displayRole(user.role) || '-') +
+            KSL.roleBadgeHtml(user.role, user) +
+            '</td>' +
+            '<td>' +
+            KSL.escapeHtml(staffNameForUser(user)) +
             '</td>' +
             '<td><span class="status-badge ' +
             statusClass +
@@ -306,20 +409,19 @@
             KSL.escapeHtml(user.accountStatus || '-') +
             '</span></td>' +
             '<td>' +
-            KSL.escapeHtml(user.department || '-') +
-            '</td>' +
-            '<td>' +
             KSL.escapeHtml(KSL.formatDate(user.lastLogin) || '-') +
             '</td>' +
-            '<td><div class="action-menu">' +
-            '<button class="btn btn-outline action-menu-toggle" type="button" aria-haspopup="true">Actions</button>' +
-            '<div class="action-menu-list hidden">' +
-            menuItems.join('') +
-            '</div></div></td>' +
+            '<td>' +
+            buildUserActions(user) +
+            '</td>' +
             '</tr>'
           );
         })
         .join('');
+      var selectAll = document.getElementById('usersSelectAll');
+      if (selectAll) {
+        selectAll.checked = false;
+      }
     }
 
     function renderPagination() {
@@ -358,6 +460,12 @@
 
     function loadUsers() {
       var filters = getFilters();
+      KSL.replaceFiltersInUrl({
+        query: filters.query,
+        role: filters.role,
+        status: filters.status,
+        page: filters.page > 1 ? filters.page : ''
+      });
       KSL.call('listUsers', KSL.getSessionToken(), filters)
         .then(function (response) {
           if (!response || !response.success) {
@@ -365,91 +473,71 @@
           }
           var payload = response.data || {};
           state.users = payload.items || [];
+          state.viewerIsSuperAdmin = Boolean(payload.viewerIsSuperAdmin);
           var pagination = payload.pagination || {};
           state.page = Number(pagination.page || 1);
           state.pages = Number(pagination.pages || 1);
           renderUsersTable();
           renderPagination();
-          loadPendingUsers();
         })
         .catch(function (error) {
           KSL.showToast(error.message || 'Failed to load users.', 'error');
         });
     }
 
-    function loadPendingUsers() {
-      KSL.call('listPendingUsers', KSL.getSessionToken())
-        .then(function (response) {
-          var payload = response && response.data ? response.data : {};
-          state.pending = payload.items || [];
-          renderApprovalQueue(state.pending);
-        })
-        .catch(function () {
-          renderApprovalQueue(state.users);
-        });
-    }
-
-    function openApprovalModal(userId) {
-      var selected = state.users.concat(state.pending).find(function (user) {
-        return user.userId === userId;
-      });
-      if (!selected) {
-        KSL.showToast('Selected user was not found.', 'error');
-        return;
-      }
-      document.getElementById('approvalUserId').value = selected.userId;
-      document.getElementById('approvalDepartment').value = selected.department || '';
-      document.getElementById('approvalJobTitle').value = selected.jobTitle || '';
-      document.getElementById('approvalRole').value = KSL.displayRole(selected.role || 'Staff');
-      loadStaffSelects(selected.employeeId || '', selected.supervisorId || '').then(function () {
-        KSL.openModal('userApprovalModalBackdrop');
-      });
-    }
-
-    function submitApproval(event) {
-      event.preventDefault();
-      var payload = {
-        userId: document.getElementById('approvalUserId').value.trim(),
-        employeeId: document.getElementById('approvalEmployeeId').value.trim(),
-        department: document.getElementById('approvalDepartment').value.trim(),
-        jobTitle: document.getElementById('approvalJobTitle').value.trim(),
-        role: document.getElementById('approvalRole').value,
-        supervisorId: document.getElementById('approvalSupervisorId').value.trim(),
-        accountStatus: 'Active'
-      };
-      KSL.call('approveUser', KSL.getSessionToken(), payload)
-        .then(function (response) {
-          if (!response || !response.success) {
-            throw new Error((response && response.message) || 'Approval failed.');
-          }
-          KSL.showToast('User approved successfully.', 'success');
-          KSL.closeModal('userApprovalModalBackdrop');
-          loadUsers();
-        })
-        .catch(function (error) {
-          KSL.showToast(error.message || 'Approval failed.', 'error');
-        });
-    }
-
     function updateStatus(userId, status) {
-      var confirmed = window.confirm('Change account status to "' + status + '"?');
-      if (!confirmed) {
+      KSL.confirmModal({
+        title: 'Change status',
+        message: 'Change account status to "' + status + '"?'
+      }).then(function (ok) {
+        if (!ok) {
+          return;
+        }
+        KSL.call('updateUserAccountStatus', KSL.getSessionToken(), {
+          userId: userId,
+          accountStatus: status
+        })
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Status update failed.');
+            }
+            KSL.showToast('Account status updated.', 'success');
+            loadUsers();
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Status update failed.', 'error');
+          });
+      });
+    }
+
+    function bulkStatus(status) {
+      var ids = selectedUserIds();
+      if (!ids.length) {
+        KSL.showToast('Select at least one user.', 'error');
         return;
       }
-      KSL.call('updateUserAccountStatus', KSL.getSessionToken(), {
-        userId: userId,
-        accountStatus: status
-      })
-        .then(function (response) {
-          if (!response || !response.success) {
-            throw new Error((response && response.message) || 'Status update failed.');
-          }
-          KSL.showToast('Account status updated.', 'success');
-          loadUsers();
+      KSL.confirmModal({
+        title: status + ' selected',
+        message: 'Set ' + ids.length + ' selected account' + (ids.length === 1 ? '' : 's') + ' to ' + status + '?'
+      }).then(function (ok) {
+        if (!ok) {
+          return;
+        }
+        KSL.call('bulkUpdateUserAccountStatus', KSL.getSessionToken(), {
+          userIds: ids,
+          accountStatus: status
         })
-        .catch(function (error) {
-          KSL.showToast(error.message || 'Status update failed.', 'error');
-        });
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Bulk update failed.');
+            }
+            KSL.showToast(response.message || 'Accounts updated.', 'success');
+            loadUsers();
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Bulk update failed.', 'error');
+          });
+      });
     }
 
     function suggestUsername(user) {
@@ -471,83 +559,60 @@
         KSL.showToast('User not found.', 'error');
         return;
       }
-
-      var username = window.prompt('Username for this account:', suggestUsername(target));
-      if (username === null) {
-        return;
-      }
-      username = String(username || '').trim().toLowerCase();
-      if (!username) {
-        KSL.showToast('Username is required.', 'error');
-        return;
-      }
-
-      var newPassword = window.prompt(
-        'Enter a new temporary password (must include uppercase, lowercase, and a number):',
-        ''
-      );
-      if (newPassword === null) {
-        return;
-      }
-      if (!newPassword) {
-        KSL.showToast('Password is required.', 'error');
-        return;
-      }
-      var confirmPassword = window.prompt('Confirm the new password:', '');
-      if (confirmPassword === null) {
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        KSL.showToast('Passwords do not match.', 'error');
-        return;
-      }
-
-      KSL.callBusy('adminResetUserPassword', KSL.getSessionToken(), {
-        userId: userId,
-        username: username,
-        newPassword: newPassword
-      })
-        .then(function (response) {
-          if (!response || !response.success) {
-            throw new Error((response && response.message) || 'Password reset failed.');
-          }
-          KSL.showToast('Password updated.', 'success');
-          loadUsers();
+      KSL.promptPassword({ username: suggestUsername(target) }).then(function (result) {
+        if (!result) {
+          return;
+        }
+        KSL.callBusy('adminResetUserPassword', KSL.getSessionToken(), {
+          userId: userId,
+          username: result.username,
+          newPassword: result.password
         })
-        .catch(function (error) {
-          KSL.showToast(error.message || 'Password reset failed.', 'error');
-        });
+          .then(function (response) {
+            if (!response || !response.success) {
+              throw new Error((response && response.message) || 'Password reset failed.');
+            }
+            KSL.showToast('Password updated.', 'success');
+            loadUsers();
+          })
+          .catch(function (error) {
+            KSL.showToast(error.message || 'Password reset failed.', 'error');
+          });
+      });
     }
 
-    function renderApprovalQueue(items) {
-      var body = document.getElementById('approvalQueueBody');
-      var queue = document.getElementById('approvalQueue');
-      var pending = (items || []).filter(function (user) {
-        return String(user.accountStatus || '').toLowerCase() === 'pending approval';
+    function deleteUser(userId, name) {
+      KSL.confirmDelete(name || userId).then(function (ok) {
+        if (!ok) {
+          return;
+        }
+        var removed = state.users.filter(function (user) {
+          return user.userId === userId;
+        })[0];
+        state.users = state.users.filter(function (user) {
+          return user.userId !== userId;
+        });
+        renderUsersTable();
+        KSL.scheduleAction({
+          message: 'User will be deleted. Undo?',
+          delayMs: 5000,
+          run: function () {
+            return KSL.call('deleteUserAccount', KSL.getSessionToken(), { userId: userId }).then(function (response) {
+              if (!response || !response.success) {
+                throw new Error((response && response.message) || 'Delete failed.');
+              }
+              KSL.showToast('User deleted.', 'success');
+            });
+          },
+          onUndo: function () {
+            if (removed) {
+              state.users.unshift(removed);
+              renderUsersTable();
+            }
+            KSL.showToast('Delete cancelled.', 'info');
+          }
+        });
       });
-      queue.classList.toggle('hidden', pending.length === 0 && document.getElementById('usersStatusFilter').value !== 'Pending Approval');
-      if (!pending.length) {
-        body.innerHTML = '<tr><td colspan="5" class="empty-state">No pending accounts.</td></tr>';
-        return;
-      }
-      queue.classList.remove('hidden');
-      body.innerHTML = pending
-        .map(function (user) {
-          return (
-            '<tr><td>' +
-            KSL.escapeHtml(user.username || '-') +
-            '</td><td>' +
-            KSL.escapeHtml(user.fullName || '-') +
-            '</td><td>' +
-            KSL.escapeHtml(user.email || '-') +
-            '</td><td>' +
-            KSL.escapeHtml(user.accountStatus) +
-            '</td><td><button class="btn btn-secondary" type="button" data-action="approve" data-user-id="' +
-            KSL.escapeHtml(user.userId) +
-            '">Approve</button></td></tr>'
-          );
-        })
-        .join('');
     }
 
     function bindTableActions() {
@@ -556,6 +621,10 @@
         return;
       }
       body.addEventListener('click', function (event) {
+        if (event.target.closest('input[type="checkbox"]')) {
+          event.stopPropagation();
+          return;
+        }
         var toggle = event.target.closest('.action-menu-toggle');
         if (toggle) {
           event.stopPropagation();
@@ -571,35 +640,112 @@
           return;
         }
         var button = event.target.closest('button[data-action]');
-        if (!button) {
-          return;
-        }
-        var action = button.dataset.action;
-        var userId = button.dataset.userId || '';
-        if (action === 'approve') {
-          openApprovalModal(userId);
-          return;
-        }
-        if (action === 'password') {
-          resetPassword(userId);
-          return;
-        }
-        if (action === 'status') {
-          updateStatus(userId, button.dataset.status || '');
-          return;
-        }
-        if (action === 'delete' && KSL.confirmDelete(button.dataset.name || userId)) {
-          KSL.call('deleteUserAccount', KSL.getSessionToken(), { userId: userId })
-            .then(function (response) {
-              if (!response || !response.success) {
-                throw new Error((response && response.message) || 'Delete failed.');
+        if (button) {
+          event.stopPropagation();
+          var action = button.dataset.action;
+          var userId = button.dataset.userId || '';
+          if (action === 'password') {
+            resetPassword(userId);
+            return;
+          }
+          if (action === 'status') {
+            updateStatus(userId, button.dataset.status || '');
+            return;
+          }
+          if (action === 'promote') {
+            KSL.confirmModal({
+              title: 'Make administrator',
+              message: 'Make this user an Administrator? They will be able to open Users and Settings.'
+            }).then(function (promoteOk) {
+              if (!promoteOk) {
+                return;
               }
-              KSL.showToast('User deleted.', 'success');
-              loadUsers();
-            })
-            .catch(function (error) {
-              KSL.showToast(error.message || 'Delete failed.', 'error');
+              KSL.call('updateUserRole', KSL.getSessionToken(), { userId: userId, role: 'Administrator' })
+                .then(function (response) {
+                  if (!response || !response.success) {
+                    throw new Error((response && response.message) || 'Role update failed.');
+                  }
+                  KSL.showToast('User is now an Administrator.', 'success');
+                  loadUsers();
+                })
+                .catch(function (error) {
+                  KSL.showToast(error.message || 'Role update failed.', 'error');
+                });
             });
+            return;
+          }
+          if (action === 'demote') {
+            KSL.promptModal({
+              title: 'Demote administrator',
+              message: 'Choose the new role.',
+              label: 'Role',
+              defaultValue: 'Manager'
+            }).then(function (nextRole) {
+              if (nextRole === null) {
+                return;
+              }
+              nextRole = String(nextRole || '').trim();
+              if (!nextRole) {
+                KSL.showToast('A role is required.', 'error');
+                return;
+              }
+              KSL.call('updateUserRole', KSL.getSessionToken(), { userId: userId, role: nextRole })
+                .then(function (response) {
+                  if (!response || !response.success) {
+                    throw new Error((response && response.message) || 'Role update failed.');
+                  }
+                  KSL.showToast('Administrator demoted.', 'success');
+                  loadUsers();
+                })
+                .catch(function (error) {
+                  KSL.showToast(error.message || 'Role update failed.', 'error');
+                });
+            });
+            return;
+          }
+          if (action === 'transfer') {
+            KSL.confirmModal({
+              title: 'Transfer ownership',
+              message:
+                'Transfer Super Admin ownership to this administrator? You will remain an Administrator, but they will become the permanent Super Admin.',
+              confirmLabel: 'Transfer'
+            }).then(function (transferOk) {
+              if (!transferOk) {
+                return;
+              }
+              KSL.call('transferSuperAdminOwnership', KSL.getSessionToken(), { userId: userId })
+                .then(function (response) {
+                  if (!response || !response.success) {
+                    throw new Error((response && response.message) || 'Ownership transfer failed.');
+                  }
+                  KSL.showToast('Ownership transferred. Refresh to update your role label.', 'success');
+                  loadUsers();
+                  if (KSL.state.currentUser) {
+                    KSL.state.currentUser.isSuperAdmin = false;
+                    KSL.state.currentUser.displayRole = 'Administrator';
+                    var roleEl = document.getElementById('userRole');
+                    if (roleEl) {
+                      roleEl.innerHTML = KSL.roleBadgeHtml('Administrator', KSL.state.currentUser);
+                    }
+                  }
+                })
+                .catch(function (error) {
+                  KSL.showToast(error.message || 'Ownership transfer failed.', 'error');
+                });
+            });
+            return;
+          }
+          if (action === 'delete') {
+            deleteUser(userId, button.dataset.name || userId);
+          }
+          return;
+        }
+        var row = event.target.closest('tr[data-open-user]');
+        if (row) {
+          var found = state.users.filter(function (user) {
+            return user.userId === row.getAttribute('data-open-user');
+          })[0];
+          openUserPanel(found);
         }
       });
     }
@@ -621,42 +767,69 @@
         state.page = 1;
         loadUsers();
       });
-      document.getElementById('userApprovalForm').addEventListener('submit', submitApproval);
+      var activateSelected = document.getElementById('usersActivateSelected');
+      var suspendSelected = document.getElementById('usersSuspendSelected');
+      if (activateSelected) {
+        activateSelected.addEventListener('click', function () {
+          bulkStatus('Active');
+        });
+      }
+      if (suspendSelected) {
+        suspendSelected.addEventListener('click', function () {
+          bulkStatus('Suspended');
+        });
+      }
+      var selectAll = document.getElementById('usersSelectAll');
+      if (selectAll) {
+        selectAll.addEventListener('change', function () {
+          document.querySelectorAll('.user-row-check').forEach(function (box) {
+            box.checked = selectAll.checked;
+          });
+        });
+      }
+      document.getElementById('newUserStaffMember').addEventListener('change', applySelectedStaff);
       document.getElementById('newUserButton').addEventListener('click', function () {
         document.getElementById('newUserForm').reset();
-        document.getElementById('newUserStatus').value = 'Active';
+        document.getElementById('newUserStaffUid').value = '';
         document.getElementById('newUserRole').value = 'Staff';
-        loadStaffSelects('', '');
+        loadStaffSelects('').then(function () {
+          applySelectedStaff();
+        });
         KSL.previewNextId('USR').then(function (nextId) {
           document.getElementById('newUserIdPreview').value = nextId || 'Generated on save';
         });
         KSL.openModal('newUserModalBackdrop');
       });
-      document.getElementById('usersPendingButton').addEventListener('click', function () {
-        document.getElementById('usersStatusFilter').value = 'Pending Approval';
-        state.page = 1;
-        loadUsers();
-        document.getElementById('approvalQueue').classList.remove('hidden');
-      });
       document.getElementById('newUserForm').addEventListener('submit', function (event) {
         event.preventDefault();
+        var role = document.getElementById('newUserRole').value;
+        var staffId = document.getElementById('newUserStaffMember').value.trim();
+        if (role !== 'Administrator' && !staffId) {
+          KSL.showToast('Select the staff member this login belongs to.', 'error');
+          return;
+        }
+        var passwordCheck = KSL.validatePassword(document.getElementById('newUserPassword').value);
+        if (!passwordCheck.valid) {
+          KSL.showToast(
+            'Password must include ' + passwordCheck.min + '+ characters, uppercase, lowercase, and a number.',
+            'error'
+          );
+          return;
+        }
         KSL.call('createUserAccount', KSL.getSessionToken(), {
           fullName: document.getElementById('newUserFullName').value.trim(),
           username: document.getElementById('newUserUsername').value.trim(),
           email: document.getElementById('newUserEmail').value.trim(),
           password: document.getElementById('newUserPassword').value,
-          role: document.getElementById('newUserRole').value,
-          employeeId: document.getElementById('newUserEmployeeId').value.trim(),
-          supervisorId: document.getElementById('newUserSupervisorId').value.trim(),
-          department: document.getElementById('newUserDepartment').value.trim(),
-          jobTitle: document.getElementById('newUserJobTitle').value.trim(),
-          accountStatus: document.getElementById('newUserStatus').value
+          role: role,
+          employeeId: staffId,
+          accountStatus: 'Active'
         })
           .then(function (response) {
             if (!response || !response.success) {
               throw new Error((response && response.message) || 'Unable to create user.');
             }
-            KSL.showToast('User created.', 'success');
+            KSL.showToast('User created. They can sign in now.', 'success');
             KSL.closeModal('newUserModalBackdrop');
             state.page = 1;
             loadUsers();
@@ -665,29 +838,31 @@
             KSL.showToast(error.message || 'Unable to create user.', 'error');
           });
       });
-      document.getElementById('approvalQueueBody').addEventListener('click', function (event) {
-        var button = event.target.closest('button[data-action="approve"]');
-        if (!button) {
-          return;
-        }
-        openApprovalModal(button.dataset.userId || '');
-      });
     }
 
     document.addEventListener('DOMContentLoaded', function () {
       KSL.requireAuth(['Administrator'], function () {
         var defaultRoles = ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff'];
-        var defaultStatuses = ['Active', 'Inactive', 'Pending'];
+        var defaultStatuses = ['Active', 'Suspended', 'Disabled'];
         function applyUserDimensions(dimensions) {
+          var saved = {
+            role: document.getElementById('usersRoleFilter').value,
+            status: document.getElementById('usersStatusFilter').value
+          };
           var values = dimensions || {};
-          renderDropdownOptions('usersRoleFilter', staffRoleValues(values.Roles || defaultRoles), 'All roles');
+          renderDropdownOptions('usersRoleFilter', rolesForFilter(values.Roles || defaultRoles), 'All roles');
           renderDropdownOptions(
             'usersStatusFilter',
-            values['Account Statuses'] || defaultStatuses,
+            withoutPendingStatus(values['Account Statuses'] || defaultStatuses),
             'All statuses'
           );
-          renderDropdownOptions('approvalRole', staffRoleValues(values.Roles || defaultRoles), '');
-          renderDropdownOptions('newUserRole', staffRoleValues(values.Roles || defaultRoles), '');
+          renderDropdownOptions('newUserRole', rolesForNewUser(values.Roles || defaultRoles), '');
+          if (saved.role) {
+            document.getElementById('usersRoleFilter').value = saved.role;
+          }
+          if (saved.status) {
+            document.getElementById('usersStatusFilter').value = saved.status;
+          }
         }
         applyUserDimensions({});
         KSL.call('listDimensionsAdmin', KSL.getSessionToken())
@@ -705,9 +880,19 @@
           .catch(function () {
             return null;
           });
-        loadStaffSelects('', '');
+        loadStaffSelects('').then(function () {
+          renderUsersTable();
+        });
         bindTableActions();
         bindFilters();
+        var saved = KSL.applyFiltersFromUrl({
+          query: 'usersSearchInput',
+          role: 'usersRoleFilter',
+          status: 'usersStatusFilter'
+        });
+        if (saved && KSL.readQueryParam('page')) {
+          state.page = Number(KSL.readQueryParam('page')) || 1;
+        }
         document.addEventListener('click', function () {
           document.querySelectorAll('.action-menu-list').forEach(function (menu) {
             menu.classList.add('hidden');

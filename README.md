@@ -8,7 +8,10 @@ Web app for planning, assigning, tracking, and reviewing work at Kenya Shipyards
 
 There is **one Sign in page** for Administrator and Staff. After an admin creates a staff record and a username, that person signs in on the same page.
 
-**Live app:** https://script.google.com/macros/s/AKfycbzn34cAzmEzRipA4Y2omX8psx4O0OPEWpOoufIkMqK2Mp-bz7I2Tz-yicHosAoRj3f2Pw/exec
+**Live app (share this in email):**  
+https://script.google.com/a/*/macros/s/AKfycbzn34cAzmEzRipA4Y2omX8psx4O0OPEWpOoufIkMqK2Mp-bz7I2Tz-yicHosAoRj3f2Pw/exec
+
+Send that `/exec` web app link only. Do not send a Google Sheet, Drive file, Apps Script editor, `/dev`, or `usercontent.com` URL — those show Google Drive’s “Sorry, unable to open the file at present” page. If a recipient is signed into several Google accounts, ask them to open the link in a private/incognito window.
 
 ## Repository layout
 

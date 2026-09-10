@@ -393,7 +393,20 @@
     }
 
     function loadTasks() {
-      KSL.call('listTasks', KSL.getSessionToken(), getFilters())
+      var filters = getFilters();
+      KSL.replaceFiltersInUrl({
+        query: filters.query,
+        department: filters.department,
+        team: filters.team,
+        section: filters.section,
+        taskCategory: filters.taskCategory,
+        taskType: filters.taskType,
+        priority: filters.priority,
+        status: filters.status,
+        recordStatus: filters.recordStatus,
+        page: filters.page > 1 ? filters.page : ''
+      });
+      KSL.call('listTasks', KSL.getSessionToken(), filters)
         .then(function (response) {
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Unable to load tasks.');
@@ -696,7 +709,7 @@
           if (!response || !response.success) {
             throw new Error((response && response.message) || 'Export failed.');
           }
-          KSL.downloadFile(response.data);
+          KSL.previewOrDownloadFile(response.data);
           KSL.showToast('Report generated.', 'success');
         })
         .catch(function (error) {
@@ -840,51 +853,75 @@
           return;
         }
         if (action === 'archive') {
-          if (!window.confirm('Archive this task?')) {
-            return;
-          }
-          KSL.call('archiveTask', KSL.getSessionToken(), { taskId: taskId })
-            .then(function (response) {
-              if (!response || !response.success) {
-                throw new Error((response && response.message) || 'Unable to archive task.');
-              }
-              KSL.showToast('Task archived.', 'success');
-              loadTasks();
-            })
-            .catch(function (error) {
-              KSL.showToast(error.message || 'Unable to archive task.', 'error');
-            });
+          KSL.confirmModal({ title: 'Archive task', message: 'Archive this task?' }).then(function (ok) {
+            if (!ok) {
+              return;
+            }
+            KSL.call('archiveTask', KSL.getSessionToken(), { taskId: taskId })
+              .then(function (response) {
+                if (!response || !response.success) {
+                  throw new Error((response && response.message) || 'Unable to archive task.');
+                }
+                KSL.showToast('Task archived.', 'success');
+                loadTasks();
+              })
+              .catch(function (error) {
+                KSL.showToast(error.message || 'Unable to archive task.', 'error');
+              });
+          });
           return;
         }
         if (action === 'reopen') {
-          if (!window.confirm('Reopen this task?')) {
-            return;
-          }
-          KSL.call('reopenTask', KSL.getSessionToken(), { taskId: taskId })
-            .then(function (response) {
-              if (!response || !response.success) {
-                throw new Error((response && response.message) || 'Unable to reopen task.');
-              }
-              KSL.showToast('Task reopened.', 'success');
-              loadTasks();
-            })
-            .catch(function (error) {
-              KSL.showToast(error.message || 'Unable to reopen task.', 'error');
-            });
+          KSL.confirmModal({ title: 'Reopen task', message: 'Reopen this task?' }).then(function (ok) {
+            if (!ok) {
+              return;
+            }
+            KSL.call('reopenTask', KSL.getSessionToken(), { taskId: taskId })
+              .then(function (response) {
+                if (!response || !response.success) {
+                  throw new Error((response && response.message) || 'Unable to reopen task.');
+                }
+                KSL.showToast('Task reopened.', 'success');
+                loadTasks();
+              })
+              .catch(function (error) {
+                KSL.showToast(error.message || 'Unable to reopen task.', 'error');
+              });
+          });
           return;
         }
-        if (action === 'delete' && KSL.confirmDelete(button.dataset.name || taskId)) {
-          KSL.call('deleteTask', KSL.getSessionToken(), { taskId: taskId })
-            .then(function (response) {
-              if (!response || !response.success) {
-                throw new Error((response && response.message) || 'Unable to delete task.');
-              }
-              KSL.showToast('Task deleted.', 'success');
-              loadTasks();
-            })
-            .catch(function (error) {
-              KSL.showToast(error.message || 'Unable to delete task.', 'error');
+        if (action === 'delete') {
+          KSL.confirmDelete(button.dataset.name || taskId).then(function (ok) {
+            if (!ok) {
+              return;
+            }
+            var removed = state.tasks.filter(function (item) {
+              return item.taskId === taskId;
+            })[0];
+            state.tasks = state.tasks.filter(function (item) {
+              return item.taskId !== taskId;
             });
+            renderTasks();
+            KSL.scheduleAction({
+              message: 'Task will be deleted. Undo?',
+              delayMs: 5000,
+              run: function () {
+                return KSL.call('deleteTask', KSL.getSessionToken(), { taskId: taskId }).then(function (response) {
+                  if (!response || !response.success) {
+                    throw new Error((response && response.message) || 'Unable to delete task.');
+                  }
+                  KSL.showToast('Task deleted.', 'success');
+                });
+              },
+              onUndo: function () {
+                if (removed) {
+                  state.tasks.unshift(removed);
+                  renderTasks();
+                }
+                KSL.showToast('Delete cancelled.', 'info');
+              }
+            });
+          });
         }
       });
     }
@@ -893,6 +930,17 @@
       KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader'], function () {
         KSL.bindPdfPicker('taskAttachmentInput');
         bindEvents();
+        KSL.applyFiltersFromUrl({
+          query: 'tasksSearchInput',
+          department: 'tasksDepartmentFilter',
+          team: 'tasksTeamFilter',
+          section: 'tasksSectionFilter',
+          taskCategory: 'tasksCategoryFilter',
+          taskType: 'tasksTypeFilter',
+          priority: 'tasksPriorityFilter',
+          status: 'tasksStatusFilter',
+          recordStatus: 'tasksRecordStatusFilter'
+        });
         loadTaskMetadata()
           .then(function () {
             loadTasks();

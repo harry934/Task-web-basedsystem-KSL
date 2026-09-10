@@ -72,12 +72,42 @@ function getEmployeeFormMetadata(sessionToken) {
       departments = dimensions.Departments || [];
     }
 
+    var staffOptions = [];
+    try {
+      staffOptions = readSheetRecords_('EMPLOYEES')
+        .filter(function (record) {
+          return normalizeString_(record['Employment Status']).toLowerCase() !== 'inactive';
+        })
+        .map(mapEmployeeForResponse_);
+    } catch (staffError) {
+      staffOptions = [];
+    }
+
+    var teams = [];
+    try {
+      teams = readSheetRecords_('TEAMS')
+        .filter(function (record) {
+          return normalizeString_(record.Status).toLowerCase() === 'active';
+        })
+        .map(function (record) {
+          return normalizeString_(record['Team Name']);
+        })
+        .filter(Boolean);
+    } catch (teamError) {
+      teams = [];
+    }
+    if (!teams.length) {
+      teams = dimensions.Teams || [];
+    }
+
     return successResponse_('Employee form metadata loaded.', {
       departments: departments,
       jobTitles: dimensions['Job Titles'] || [],
       employmentTypes: dimensions['Employment Types'] || [],
       workLocations: dimensions['Work Locations'] || [],
-      staff: getAssignablePeople_()
+      sections: dimensions.Sections || [],
+      teams: teams,
+      staff: staffOptions
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load employee form options.');
@@ -96,6 +126,7 @@ function createEmployee(sessionToken, payload) {
     if (!department) {
       throw new Error('Department is required.');
     }
+    var phone = normalizeKenyaPhone_(input.phone);
 
     var schema = resolveSchema_('EMPLOYEES');
     var sheet = getSheetBySchema_(schema);
@@ -127,7 +158,7 @@ function createEmployee(sessionToken, payload) {
       'First Name': normalizeString_(input.firstName) || nameParts[0] || '',
       'Last Name': normalizeString_(input.lastName) || nameParts.slice(1).join(' '),
       Email: email,
-      Phone: normalizeString_(input.phone),
+      Phone: phone,
       Department: department,
       Section: normalizeString_(input.section),
       'Job Title': normalizeString_(input.jobTitle),
@@ -218,7 +249,7 @@ function updateEmployee(sessionToken, payload) {
     updated['Last Name'] = normalizeString_(input.lastName) || nameParts.slice(1).join(' ');
     updated['Employee Number'] = normalizeString_(input.employeeNumber) || updated['Employee Number'];
     updated.Email = email;
-    updated.Phone = normalizeString_(input.phone);
+    updated.Phone = normalizeKenyaPhone_(input.phone);
     updated.Department = normalizeString_(input.department);
     updated.Section = normalizeString_(input.section);
     updated['Job Title'] = normalizeString_(input.jobTitle);
@@ -383,6 +414,24 @@ function exportEmployees(sessionToken, options) {
   } catch (error) {
     return errorResponse_(error.message || 'Failed to export employees.');
   }
+}
+
+function normalizeKenyaPhone_(phone) {
+  var raw = normalizeString_(phone);
+  if (!raw) {
+    return '';
+  }
+  var digits = raw.replace(/\D/g, '');
+  if (digits.indexOf('254') === 0) {
+    digits = digits.substring(3);
+  }
+  if (digits.charAt(0) === '0') {
+    digits = digits.substring(1);
+  }
+  if (!/^\d{9}$/.test(digits)) {
+    throw new Error('Phone must be +254 followed by 9 digits, for example +254712345678.');
+  }
+  return '+254' + digits;
 }
 
 function mapEmployeeForResponse_(record) {

@@ -260,20 +260,29 @@
             return;
           }
           if (button.dataset.action === 'delete') {
-            if (!KSL.confirmDelete(button.dataset.name || button.dataset.id)) {
-              return;
-            }
-            KSL.call('deleteAssignment', KSL.getSessionToken(), { assignmentId: button.dataset.id })
-              .then(function (response) {
-                if (!response || !response.success) {
-                  throw new Error((response && response.message) || 'Delete failed.');
+            KSL.confirmDelete(button.dataset.name || button.dataset.id).then(function (ok) {
+              if (!ok) {
+                return;
+              }
+              KSL.scheduleAction({
+                message: 'Assignment will be deleted. Undo?',
+                delayMs: 5000,
+                run: function () {
+                  return KSL.call('deleteAssignment', KSL.getSessionToken(), {
+                    assignmentId: button.dataset.id
+                  }).then(function (response) {
+                    if (!response || !response.success) {
+                      throw new Error((response && response.message) || 'Delete failed.');
+                    }
+                    KSL.showToast('Assignment deleted.', 'success');
+                    loadAssignments();
+                  });
+                },
+                onUndo: function () {
+                  KSL.showToast('Delete cancelled.', 'info');
                 }
-                KSL.showToast('Assignment deleted.', 'success');
-                loadAssignments();
-              })
-              .catch(function (error) {
-                KSL.showToast(error.message || 'Delete failed.', 'error');
               });
+            });
             return;
           }
           if (button.dataset.action !== 'reassign') {

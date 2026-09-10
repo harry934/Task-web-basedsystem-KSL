@@ -1,7 +1,10 @@
 function listDepartments(sessionToken, options) {
   try {
-    requireSession_(sessionToken, ['Administrator', 'Manager'], 'departments');
+    var authContext = requireSession_(sessionToken, ['Administrator', 'Manager'], 'departments');
     var filters = options || {};
+    if (Boolean(filters.importMissing) || !readSheetRecords_('DEPARTMENTS').length) {
+      syncDepartmentsFromDimensions_(authContext.user);
+    }
     var query = normalizeString_(filters.query).toLowerCase();
     var statusFilter = normalizeString_(filters.status).toLowerCase();
     var headFilter = normalizeString_(filters.departmentHead).toLowerCase();
@@ -337,4 +340,60 @@ function mapDepartmentForResponse_(record) {
     createdDate: toClientDate_(record['Created Date']),
     updatedDate: toClientDate_(record['Updated Date'])
   };
+}
+
+function importDepartmentsFromDimensions(sessionToken) {
+  try {
+    var authContext = requireSession_(sessionToken, ['Administrator', 'Manager'], 'departments');
+    var created = syncDepartmentsFromDimensions_(authContext.user);
+    return successResponse_(
+      created.length
+        ? 'Imported ' + created.length + ' department' + (created.length === 1 ? '' : 's') + ' from Dimensions.'
+        : 'All Dimension department names already exist here.',
+      { created: created }
+    );
+  } catch (error) {
+    return errorResponse_(error.message || 'Failed to import departments.');
+  }
+}
+
+function syncDepartmentsFromDimensions_(actor) {
+  return withScriptLock_(function () {
+    var names = getDimensionValues_('Departments') || [];
+    if (!names.length) {
+      return [];
+    }
+    var schema = resolveSchema_('DEPARTMENTS');
+    var sheet = getSheetBySchema_(schema);
+    var existing = readSheetRecords_(schema);
+    var existingNames = {};
+    existing.forEach(function (record) {
+      existingNames[normalizeString_(record['Department Name']).toLowerCase()] = true;
+    });
+    var created = [];
+    var now = new Date();
+    var actorId = actor && actor.userId ? actor.userId : 'system';
+    names.forEach(function (name) {
+      var departmentName = normalizeString_(name);
+      if (!departmentName || existingNames[departmentName.toLowerCase()]) {
+        return;
+      }
+      var departmentId = generateSequenceIdUnlocked_('DEP');
+      var record = {
+        'Department ID': departmentId,
+        'Department Name': departmentName,
+        'Department Head': '',
+        'Department Description': 'Imported from Settings → Dimensions.',
+        Status: 'Active',
+        'Created Date': now,
+        'Created By': actorId,
+        'Updated Date': now,
+        'Updated By': actorId
+      };
+      appendSheetRecord_(sheet, schema.columns, record);
+      existingNames[departmentName.toLowerCase()] = true;
+      created.push(departmentName);
+    });
+    return created;
+  });
 }

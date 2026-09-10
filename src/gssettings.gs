@@ -5,14 +5,22 @@ function listSettingsAdmin(sessionToken, options) {
     var query = normalizeString_(filters.query).toLowerCase();
     var group = normalizeString_(filters.group).toLowerCase();
     var page = normalizeNumber_(filters.page, 1);
-    var pageSize = normalizeNumber_(filters.pageSize, 25);
+    var pageSize = normalizeNumber_(filters.pageSize, 200);
     var items = safeReadSheetRecords_('SETTINGS')
       .map(mapSetting_)
       .filter(function (item) {
-        if (group && item.group.toLowerCase() !== group) {
+        if (item.key === 'AUTH_MODE' || !item.editable) {
           return false;
         }
-        if (query && (item.key + ' ' + item.description + ' ' + item.value).toLowerCase().indexOf(query) === -1) {
+        if (group && item.displayGroup.toLowerCase() !== group) {
+          return false;
+        }
+        if (
+          query &&
+          (item.key + ' ' + item.label + ' ' + item.description + ' ' + item.value + ' ' + item.displayGroup)
+            .toLowerCase()
+            .indexOf(query) === -1
+        ) {
           return false;
         }
         return true;
@@ -34,24 +42,32 @@ function saveSettingsAdmin(sessionToken, payload) {
       var schema = resolveSchema_('SETTINGS');
       var sheet = getSheetBySchema_(schema);
       var records = safeReadSheetRecords_(schema);
-      updates.forEach(function (item) {
+      var parsedUpdates = updates.map(function (item) {
         var key = normalizeString_(item.key);
         var current = records.find(function (record) {
           return normalizeString_(record['Setting Key']) === key;
         });
         if (!current) {
-          return;
+          throw new Error('Unknown setting.');
         }
-        if (normalizeString_(current.Editable).toUpperCase() === 'FALSE') {
-          return;
+        if (normalizeString_(current.Editable).toUpperCase() === 'FALSE' || key === 'AUTH_MODE') {
+          throw new Error('That setting cannot be changed.');
         }
-        var updated = Object.assign({}, current);
-        var previous = current['Setting Value'];
+        return {
+          key: key,
+          current: current,
+          value: normalizeAdminSettingInput_(current['Data Type'], item.value, key)
+        };
+      });
+      assertPerformanceWeights_(parsedUpdates, records);
+      parsedUpdates.forEach(function (item) {
+        var updated = Object.assign({}, item.current);
+        var previous = item.current['Setting Value'];
         updated['Setting Value'] = item.value;
         updated['Updated Date'] = new Date();
         updated['Updated By'] = authContext.user.userId;
-        updateSheetRecordByRow_(sheet, current.__rowNumber, schema.columns, updated);
-        writeAuditLog_(authContext.user, 'UPDATE', 'Settings', key, 'Updated setting value.', previous, item.value);
+        updateSheetRecordByRow_(sheet, item.current.__rowNumber, schema.columns, updated);
+        writeAuditLog_(authContext.user, 'UPDATE', 'Settings', item.key, 'Updated setting value.', previous, item.value);
       });
       clearSettingsAndDimensionsCache_();
       return successResponse_('Settings saved.', {});
@@ -193,13 +209,160 @@ function rebuildSettingsConfig(sessionToken) {
 }
 
 function mapSetting_(record) {
+  var key = normalizeString_(record['Setting Key']);
+  var description = normalizeString_(record.Description);
   return {
-    key: normalizeString_(record['Setting Key']),
+    key: key,
     value: record['Setting Value'],
     group: normalizeString_(record['Setting Group']),
+    displayGroup: displaySettingGroup_(record['Setting Group'], key),
     dataType: normalizeString_(record['Data Type']),
-    description: normalizeString_(record.Description),
+    description: description,
+    label: settingLabel_(key, description),
     editable: normalizeString_(record.Editable).toUpperCase() !== 'FALSE',
     status: normalizeString_(record.Status || 'Active')
   };
+}
+
+function settingLabel_(key, description) {
+  var labels = {
+    APP_TITLE: 'Application title',
+    DEFAULT_DATE_FORMAT: 'Date format',
+    REPORT_ORG_NAME: 'Organisation name on reports',
+    DUE_SOON_DAYS: 'Days before due to flag as due soon',
+    DEFAULT_PAGE_SIZE: 'Rows per page in tables',
+    REQUIRE_ASSIGNMENT_ACCEPTANCE: 'Assignees must accept tasks',
+    REQUIRE_COMPLETION_NOTES: 'Require completion notes',
+    ALLOW_COMPLETION_BELOW_100: 'Allow completing a task below 100%',
+    REQUIRE_DELAY_REASON: 'Require a delay reason when overdue',
+    REQUIRE_BLOCKER_DESCRIPTION: 'Require a blocker description',
+    MAX_SUBTASK_PDF_MB: 'Maximum PDF size for subtask evidence (MB)',
+    MAX_ATTACHMENT_MB: 'Maximum attachment size (MB)',
+    WEIGHT_PRODUCTIVITY: 'Productivity weight (%)',
+    WEIGHT_TIMELINESS: 'Timeliness weight (%)',
+    WEIGHT_QUALITY: 'Quality weight (%)',
+    WEIGHT_RELIABILITY: 'Reliability weight (%)',
+    GRADE_EXCELLENT_MIN: 'Minimum score for Excellent',
+    GRADE_GOOD_MIN: 'Minimum score for Good',
+    GRADE_SATISFACTORY_MIN: 'Minimum score for Satisfactory',
+    PASSWORD_MIN_LENGTH: 'Minimum password length',
+    PASSWORD_MAX_FAILED_ATTEMPTS: 'Failed sign-in attempts before lockout',
+    PASSWORD_LOCKOUT_MINUTES: 'Lockout duration (minutes)',
+    SESSION_TTL_SECONDS: 'Signed-in session length (seconds)'
+  };
+  return labels[key] || description || key;
+}
+
+function displaySettingGroup_(group, key) {
+  var keyUpper = normalizeString_(key).toUpperCase();
+  if (keyUpper.indexOf('WEIGHT_') === 0 || keyUpper.indexOf('GRADE_') === 0) {
+    return 'Performance';
+  }
+  if (keyUpper === 'DUE_SOON_DAYS') {
+    return 'Tasks';
+  }
+  if (keyUpper === 'DEFAULT_PAGE_SIZE') {
+    return 'Display';
+  }
+  if (keyUpper === 'APP_TITLE' || keyUpper === 'DEFAULT_DATE_FORMAT' || keyUpper === 'REPORT_ORG_NAME') {
+    return 'General';
+  }
+  if (keyUpper.indexOf('PASSWORD_') === 0 || keyUpper === 'SESSION_TTL_SECONDS') {
+    return 'Sign-in';
+  }
+  var normalized = normalizeString_(group).toLowerCase();
+  if (normalized === 'ui' || normalized === 'interface') {
+    return 'Display';
+  }
+  if (normalized === 'authentication' || normalized === 'security') {
+    return 'Sign-in';
+  }
+  if (normalized === 'reports') {
+    return 'General';
+  }
+  if (normalized === 'workflow') {
+    return 'Workflow';
+  }
+  if (normalized === 'tasks') {
+    return 'Tasks';
+  }
+  if (normalized === 'performance') {
+    return 'Performance';
+  }
+  return normalizeString_(group) || 'Other';
+}
+
+function normalizeAdminSettingInput_(dataType, rawValue, key) {
+  var type = normalizeString_(dataType).toLowerCase();
+  var value = String(rawValue == null ? '' : rawValue).trim();
+  if (type === 'boolean') {
+    var normalized = value.toUpperCase();
+    if (normalized === 'TRUE' || normalized === 'YES' || normalized === '1') {
+      return 'TRUE';
+    }
+    if (normalized === 'FALSE' || normalized === 'NO' || normalized === '0') {
+      return 'FALSE';
+    }
+    throw new Error(settingLabel_(key, '') + ' must be Yes or No.');
+  }
+  if (type === 'number' || type === 'percentage') {
+    if (value === '' || isNaN(Number(value))) {
+      throw new Error(settingLabel_(key, '') + ' must be a number.');
+    }
+    var num = Number(value);
+    if (key === 'DUE_SOON_DAYS' && num < 0) {
+      throw new Error('Due soon days cannot be negative.');
+    }
+    if (key === 'DEFAULT_PAGE_SIZE' && num < 1) {
+      throw new Error('Rows per page must be at least 1.');
+    }
+    if (key.indexOf('WEIGHT_') === 0 && (num < 0 || num > 100)) {
+      throw new Error('Performance weights must be between 0 and 100.');
+    }
+    if (key.indexOf('GRADE_') === 0 && (num < 0 || num > 100)) {
+      throw new Error('Grade thresholds must be between 0 and 100.');
+    }
+    if (key.indexOf('PASSWORD_') === 0 && num < 1) {
+      throw new Error('Sign-in numbers must be at least 1.');
+    }
+    if (key === 'SESSION_TTL_SECONDS' && num < 300) {
+      throw new Error('Session length must be at least 300 seconds.');
+    }
+    if ((key === 'MAX_ATTACHMENT_MB' || key === 'MAX_SUBTASK_PDF_MB') && num < 1) {
+      throw new Error('File size limit must be at least 1 MB.');
+    }
+    return String(num);
+  }
+  if (type === 'date' && value) {
+    return value;
+  }
+  if (!value && key === 'APP_TITLE') {
+    throw new Error('Application title is required.');
+  }
+  return value;
+}
+
+function assertPerformanceWeights_(parsedUpdates, records) {
+  var weights = {};
+  records.forEach(function (record) {
+    var key = normalizeString_(record['Setting Key']);
+    if (key.indexOf('WEIGHT_') === 0) {
+      weights[key] = Number(record['Setting Value']);
+    }
+  });
+  parsedUpdates.forEach(function (item) {
+    if (item.key.indexOf('WEIGHT_') === 0) {
+      weights[item.key] = Number(item.value);
+    }
+  });
+  var keys = Object.keys(weights);
+  if (keys.length < 4) {
+    return;
+  }
+  var sum = keys.reduce(function (total, key) {
+    return total + (Number(weights[key]) || 0);
+  }, 0);
+  if (sum !== 100) {
+    throw new Error('Performance weights must add up to 100. Current total: ' + sum + '.');
+  }
 }
