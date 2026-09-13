@@ -1,7 +1,7 @@
 function getLogoUrl_() {
-  return KSL_OFFICIAL_LOGO_URL;
+  return getLogoDataUri();
 }
 
 function getLogoDataUri() {
-  return getLogoUrl_();
+  return HtmlService.createHtmlOutputFromFile('logo-data').getContent().replace(/^\s+|\s+$/g, '');
 }

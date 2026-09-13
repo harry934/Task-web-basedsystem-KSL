@@ -189,10 +189,23 @@
           document.getElementById('monitoringStaffSearchInput').classList.add('hidden');
           document.getElementById('monitoringStaffSearchButton').classList.add('hidden');
         }
+        var requestedView = String(KSL.readFiltersFromUrl(['view']).view || 'all').toLowerCase();
+        if (['all', 'overdue', 'duesoon', 'blocked', 'inprogress'].indexOf(requestedView) !== -1) {
+          state.view = requestedView;
+        }
+        function markMonitorView() {
+          document.querySelectorAll('.monitor-view').forEach(function (button) {
+            var active = (button.dataset.view || 'all') === state.view;
+            button.classList.toggle('btn-primary', active);
+            button.classList.toggle('btn-outline', !active);
+          });
+        }
+        markMonitorView();
         document.querySelectorAll('.monitor-view').forEach(function (button) {
           button.addEventListener('click', function () {
             state.view = button.dataset.view || 'all';
             state.page = 1;
+            markMonitorView();
             loadMonitoring();
           });
         });

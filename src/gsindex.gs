@@ -53,7 +53,8 @@ function getDashboardSummary(sessionToken, options) {
       charts: {
         status: {},
         priority: {},
-        department: {}
+        department: {},
+        overdueByDepartment: {}
       }
     };
 
@@ -85,6 +86,7 @@ function getDashboardSummary(sessionToken, options) {
       }
       if (String(derived['Is Overdue']).toLowerCase() === 'true') {
         summary.overdueTasks += 1;
+        summary.charts.overdueByDepartment[dept] = (summary.charts.overdueByDepartment[dept] || 0) + 1;
       }
       var daysRemaining = derived['Days Remaining'] === '' ? null : Number(derived['Days Remaining']);
       if (daysRemaining !== null && !isNaN(daysRemaining) && daysRemaining >= 0 && daysRemaining <= dueSoonDays && status.toLowerCase() !== 'completed') {

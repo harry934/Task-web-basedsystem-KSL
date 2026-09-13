@@ -3,6 +3,7 @@
     class="login-logo"
     id="loginLogoImg"
     alt="Kenya Shipyards Limited"
+    src="<?!= logoSrc ?>"
   >
   <p class="login-kicker">Ministry of Defence</p>
   <h1>Kenya Shipyards Limited</h1>
@@ -26,6 +27,13 @@
         <button id="loginSubmitButton" class="btn btn-primary auth-submit-button" type="submit">Sign in</button>
       </div>
     </form>
+  </div>
+
+  <div id="loginContinuePanel" class="card auth-panel hidden" style="margin-bottom: 12px; text-align: left;">
+    <strong style="display: block; margin-bottom: 10px;">Signed in</strong>
+    <a id="loginContinueLink" class="btn btn-primary login-continue-link" target="_top" rel="noopener">
+      Continue to dashboard
+    </a>
   </div>
 </section>
 

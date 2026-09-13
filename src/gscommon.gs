@@ -10,8 +10,8 @@ var EXECUTION_DIMENSIONS_CACHE_ = null;
 var EXECUTION_CREDENTIALS_CACHE_ = null;
 var SCRIPT_LOCK_HELD_ = false;
 var INACTIVE_DIMENSION_PREFIX_ = '[INACTIVE] ';
-var KSL_OFFICIAL_LOGO_URL =
-  'https://kenyashipyards.co.ke/wp-content/uploads/2022/06/cropped-KSL-High-quality-Logo-300x273.png';
+// Do not hotlink kenyashipyards.co.ke logo files. That host serves a
+// "this image was hotlinked" replacement on script.google.com. Use getLogoDataUri().
 
 function toShareableWebAppUrl_(url) {
   var raw = String(url || '').trim();

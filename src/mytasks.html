@@ -353,6 +353,10 @@
         document.getElementById('myTasksNewUpdateButton').addEventListener('click', function () {
           openProgressModal('');
         });
+        var requestedView = String(KSL.readFiltersFromUrl(['view']).view || 'all').toLowerCase();
+        if (['all', 'overdue', 'duesoon', 'blocked', 'inprogress'].indexOf(requestedView) !== -1) {
+          state.view = requestedView;
+        }
         document.getElementById('myTasksOverdueButton').addEventListener('click', function () {
           applyView('overdue');
         });

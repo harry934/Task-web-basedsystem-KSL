@@ -51,6 +51,41 @@
       { key: 'completionRate', label: 'Completion %' }
     ];
 
+    function kpiTarget(key) {
+      var staff = KSL.isStaffLike();
+      if (key === 'overdueTasks') {
+        return staff
+          ? { page: 'mytasks', query: 'view=overdue', hint: 'Open my overdue tasks' }
+          : { page: 'monitoring', query: 'view=overdue', hint: 'Open overdue monitoring' };
+      }
+      if (key === 'dueSoonTasks') {
+        return staff
+          ? { page: 'mytasks', query: 'view=duesoon', hint: 'Open tasks due soon' }
+          : { page: 'monitoring', query: 'view=duesoon', hint: 'Open due-soon monitoring' };
+      }
+      if (key === 'blockedTasks') {
+        return staff
+          ? { page: 'mytasks', query: 'view=blocked', hint: 'Open my blocked tasks' }
+          : { page: 'monitoring', query: 'view=blocked', hint: 'Open blocked tasks' };
+      }
+      if (key === 'inProgressTasks') {
+        return staff
+          ? { page: 'mytasks', query: 'view=inprogress', hint: 'Open my in-progress tasks' }
+          : { page: 'monitoring', query: 'view=inprogress', hint: 'Open in-progress work' };
+      }
+      if (key === 'completedTasks') {
+        return staff
+          ? { page: 'mytasks', hint: 'Open my tasks' }
+          : { page: 'tasks', query: 'status=Completed', hint: 'Open completed tasks' };
+      }
+      if (key === 'totalTasks' || key === 'assignedTasks') {
+        return staff
+          ? { page: 'mytasks', hint: 'Open my tasks' }
+          : { page: 'tasks', hint: 'Open the task list' };
+      }
+      return null;
+    }
+
     function filters() {
       return {
         startDate: document.getElementById('dashboardStartInput').value,
@@ -60,50 +95,131 @@
       };
     }
 
-    function renderBarChart(title, map) {
-      var entries = Object.keys(map || {});
-      if (!entries.length) {
-        return '<div class="card chart-card"><h3>' + KSL.escapeHtml(title) + '</h3><p class="page-note">No matching data found.</p></div>';
+    function chartTone(label) {
+      var key = String(label || '').toLowerCase();
+      if (key.indexOf('overdue') !== -1 || key === 'blocked' || key === 'critical') {
+        return 'is-danger';
       }
-      var max = entries.reduce(function (highest, key) {
-        return Math.max(highest, Number(map[key] || 0));
-      }, 1);
+      if (key === 'due soon' || key === 'high' || key === 'delayed') {
+        return 'is-warning';
+      }
+      if (key === 'completed' || key === 'low') {
+        return 'is-success';
+      }
+      if (key === 'in progress' || key === 'medium' || key === 'assigned') {
+        return 'is-info';
+      }
+      return '';
+    }
+
+    function chartEntries(map) {
+      return Object.keys(map || {})
+        .map(function (key) {
+          return { key: key, value: Number(map[key] || 0) };
+        })
+        .filter(function (item) {
+          return item.value > 0;
+        })
+        .sort(function (a, b) {
+          return b.value - a.value;
+        });
+    }
+
+    function renderBarChart(title, map, note) {
+      var entries = chartEntries(map);
+      var total = entries.reduce(function (sum, item) {
+        return sum + item.value;
+      }, 0);
+      if (!entries.length) {
+        return (
+          '<div class="card chart-card"><h3>' +
+          KSL.escapeHtml(title) +
+          '</h3><p class="page-note">' +
+          KSL.escapeHtml(note || 'No matching data found.') +
+          '</p></div>'
+        );
+      }
+      var max = entries[0].value || 1;
       return (
         '<div class="card chart-card"><h3>' +
         KSL.escapeHtml(title) +
-        '</h3>' +
-        entries.map(function (key) {
-          var value = Number(map[key] || 0);
-          var width = Math.round((value / max) * 100);
+        '</h3><p class="chart-total">' +
+        total +
+        ' tasks</p>' +
+        entries.map(function (item) {
+          var width = Math.round((item.value / max) * 100);
+          var share = total ? Math.round((item.value / total) * 100) : 0;
           return (
-            '<div class="chart-row"><span>' +
-            KSL.escapeHtml(key) +
-            '</span><div class="chart-bar"><span style="width:' +
+            '<div class="chart-row"><span title="' +
+            KSL.escapeHtml(item.key) +
+            '">' +
+            KSL.escapeHtml(item.key) +
+            '</span><div class="chart-bar"><span class="' +
+            chartTone(item.key) +
+            '" data-width="' +
             width +
-            '%"></span></div><strong>' +
-            value +
-            '</strong></div>'
+            '"></span></div><strong>' +
+            item.value +
+            '<em>' +
+            share +
+            '%</em></strong></div>'
           );
         }).join('') +
         '</div>'
       );
     }
 
+    function animateCharts() {
+      document.querySelectorAll('#dashboardCharts .chart-bar > span[data-width]').forEach(function (bar) {
+        bar.style.width = '0%';
+        window.requestAnimationFrame(function () {
+          window.requestAnimationFrame(function () {
+            bar.style.width = String(bar.getAttribute('data-width') || 0) + '%';
+          });
+        });
+      });
+    }
+
     function render(summary) {
       document.getElementById('dashboardKpiGrid').innerHTML = KPI_CONFIG.map(function (item) {
+        var target = kpiTarget(item.key);
+        var hint = target ? '<span class="kpi-hint">' + KSL.escapeHtml(target.hint) + '</span>' : '';
+        var attrs = target
+          ? ' class="card kpi-card is-link" type="button" data-kpi="' +
+            KSL.escapeHtml(item.key) +
+            '"'
+          : ' class="card kpi-card"';
+        var tag = target ? 'button' : 'div';
         return (
-          '<div class="card kpi-card"><h3>' +
+          '<' +
+          tag +
+          attrs +
+          '><h3>' +
           KSL.escapeHtml(item.label) +
           '</h3><strong>' +
           Number(summary[item.key] || 0) +
-          '</strong></div>'
+          '</strong>' +
+          hint +
+          '</' +
+          tag +
+          '>'
         );
       }).join('');
       var charts = summary.charts || {};
+      var workload = {
+        Completed: Number(summary.completedTasks || 0),
+        'In Progress': Number(summary.inProgressTasks || 0),
+        Overdue: Number(summary.overdueTasks || 0),
+        Blocked: Number(summary.blockedTasks || 0),
+        'Due Soon': Number(summary.dueSoonTasks || 0)
+      };
       document.getElementById('dashboardCharts').innerHTML =
-        renderBarChart('Status mix', charts.status) +
-        renderBarChart('Priority mix', charts.priority) +
-        renderBarChart('Department mix', charts.department);
+        renderBarChart('Live workload', workload, 'No active work in this filter.') +
+        renderBarChart('Status mix', charts.status, 'No task statuses in this filter.') +
+        renderBarChart('Priority mix', charts.priority, 'No priorities in this filter.') +
+        renderBarChart('Department mix', charts.department, 'No departments in this filter.') +
+        renderBarChart('Overdue by department', charts.overdueByDepartment, 'No overdue tasks in this filter.');
+      animateCharts();
     }
 
     function loadDashboard() {
@@ -158,6 +274,17 @@
           });
         }
         loadDashboard();
+        document.getElementById('dashboardKpiGrid').addEventListener('click', function (event) {
+          var card = event.target.closest('[data-kpi]');
+          if (!card) {
+            return;
+          }
+          var target = kpiTarget(card.getAttribute('data-kpi'));
+          if (!target) {
+            return;
+          }
+          KSL.navigate(target.page, target.query || '');
+        });
         document.getElementById('refreshDashboardButton').addEventListener('click', loadDashboard);
         document.getElementById('exportDashboardButton').addEventListener('click', function () { exportFile('csv'); });
         document.getElementById('exportDashboardPdfButton').addEventListener('click', function () { exportFile('pdf'); });

@@ -90,8 +90,13 @@ function doGet(e) {
   template.appTitle = getAppTitle_();
   template.tabTitle = template.pageTitle + ' | KSL';
   template.scriptUrl = getScriptUrl();
+  template.logoSrc = getLogoDataUri();
   template.navItems = isLoginPage ? [] : NAV_ITEMS;
   template.navGroups = isLoginPage ? [] : buildNavGroups_(NAV_ITEMS);
+  template.urlFilters = {
+    view: sanitizeUrlFilter_(e && e.parameter ? e.parameter.view : ''),
+    status: sanitizeUrlFilter_(e && e.parameter ? e.parameter.status : '')
+  };
 
   return template
     .evaluate()
@@ -100,6 +105,11 @@ function doGet(e) {
 }
 
 function include(filename) {
+  if (filename === 'login') {
+    var loginTemplate = HtmlService.createTemplateFromFile(filename);
+    loginTemplate.logoSrc = getLogoDataUri();
+    return loginTemplate.evaluate().getContent();
+  }
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
@@ -114,6 +124,13 @@ function resolveTemplateOrFallback_(filename) {
   } catch (error) {
     return 'comingsoon';
   }
+}
+
+function sanitizeUrlFilter_(input) {
+  return String(input || '')
+    .trim()
+    .replace(/[^\w\s+\-/%]/g, '')
+    .slice(0, 80);
 }
 
 function sanitizePageName_(input) {

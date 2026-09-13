@@ -69,6 +69,16 @@ function listMyTasks(sessionToken, options) {
             return false;
           }
         }
+        if (view === 'blocked') {
+          var taskStatus = String(item.taskStatus || '').toLowerCase();
+          var blocker = String(item.blocker || '').toLowerCase();
+          if (taskStatus !== 'blocked' && blocker !== 'yes') {
+            return false;
+          }
+        }
+        if (view === 'inprogress' && String(item.taskStatus || '').toLowerCase() !== 'in progress') {
+          return false;
+        }
         if (!query) {
           return true;
         }
