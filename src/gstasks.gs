@@ -209,6 +209,7 @@ function createTask(sessionToken, payload) {
         recalculateTaskProgressFromSubtasks_(taskId, authContext.user);
       });
     }
+    syncAssignmentsForTask_(authContext.user, taskId, input.primaryAssignee, input.subtasks || []);
     writeTaskHistory_(
       authContext.user,
       taskId,
@@ -228,33 +229,6 @@ function createTask(sessionToken, payload) {
       '',
       mapTaskForResponse_(record)
     );
-
-    var notified = {};
-    var taskTitle = normalizeString_(input.taskTitle);
-    if (input.primaryAssignee) {
-      notified[normalizeString_(input.primaryAssignee)] = true;
-      notifyAssignedStaff_(
-        input.primaryAssignee,
-        'New task assignment',
-        'You were assigned to ' + taskTitle + ' (' + taskId + ').',
-        taskId,
-        'High'
-      );
-    }
-    (input.subtasks || []).forEach(function (item) {
-      var staffId = normalizeString_(item && (item.assignedStaffId || item.employeeId));
-      if (!staffId || notified[staffId]) {
-        return;
-      }
-      notified[staffId] = true;
-      notifyAssignedStaff_(
-        staffId,
-        'New task assignment',
-        'You were assigned a subtask on ' + taskTitle + ' (' + taskId + ').',
-        taskId,
-        'High'
-      );
-    });
 
     return successResponse_('Task created successfully.', {
       taskId: taskId
@@ -404,6 +378,12 @@ function updateTask(sessionToken, payload) {
     } else {
       progress = recalculateTaskProgressFromSubtasks_(taskId, authContext.user);
     }
+    syncAssignmentsForTask_(
+      authContext.user,
+      taskId,
+      updated['Primary Assignee'],
+      input.subtasks || getSubtasksForTask_(taskId).map(mapSubtask_)
+    );
     writeTaskHistory_(
       authContext.user,
       taskId,
@@ -758,9 +738,19 @@ function applyTaskScopeForUser_(taskRecords, user) {
   var employeeId = normalizeString_(user.employeeId);
   var userId = normalizeString_(user.userId);
   var assignedTaskIds = {};
-  if (employeeId) {
+  var idMap = {};
+  function addId(value) {
+    var id = normalizeString_(value);
+    if (id) {
+      idMap[id.toLowerCase()] = true;
+    }
+  }
+  addId(employeeId);
+  addId(userId);
+  if (Object.keys(idMap).length) {
     safeReadSheetRecords_('TASK_ASSIGNMENTS').forEach(function (record) {
-      if (normalizeString_(record['Employee ID']) !== employeeId) {
+      var assignedId = normalizeString_(record['Employee ID']).toLowerCase();
+      if (!idMap[assignedId]) {
         return;
       }
       var status = normalizeString_(record['Assignment Status']).toLowerCase();
@@ -769,11 +759,17 @@ function applyTaskScopeForUser_(taskRecords, user) {
       }
       assignedTaskIds[normalizeString_(record['Task ID'])] = true;
     });
+    safeReadSheetRecords_('TASK_SUBTASKS').forEach(function (record) {
+      if (idMap[normalizeString_(record['Assigned Staff ID']).toLowerCase()]) {
+        assignedTaskIds[normalizeString_(record['Task ID'])] = true;
+      }
+    });
   }
   return safeRecords.filter(function (record) {
     var taskId = normalizeString_(record['Task ID']);
+    var primary = normalizeString_(record['Primary Assignee']).toLowerCase();
     return (
-      (employeeId && normalizeString_(record['Primary Assignee']) === employeeId) ||
+      (primary && idMap[primary]) ||
       normalizeString_(record['Created By']) === userId ||
       assignedTaskIds[taskId]
     );

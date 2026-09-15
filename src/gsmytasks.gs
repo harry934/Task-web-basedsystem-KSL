@@ -2,6 +2,105 @@ function getCurrentEmployeeId_(user) {
   return normalizeString_(user && user.employeeId);
 }
 
+function addStaffId_(idMap, value) {
+  var id = normalizeString_(value);
+  if (id) {
+    idMap[id.toLowerCase()] = id;
+  }
+}
+
+function resolveStaffIdMap_(user, userRecord) {
+  var idMap = {};
+  addStaffId_(idMap, user && user.employeeId);
+  addStaffId_(idMap, user && user.userId);
+  var email = normalizeEmail_(user && user.email);
+  if (email) {
+    safeReadSheetRecords_('EMPLOYEES').forEach(function (record) {
+      if (normalizeEmail_(record.Email) === email) {
+        addStaffId_(idMap, record['Employee ID']);
+      }
+    });
+    safeReadSheetRecords_('USERS').forEach(function (record) {
+      if (normalizeEmail_(record['Google Email']) === email) {
+        addStaffId_(idMap, record['Employee ID']);
+      }
+    });
+  }
+  if (user && !normalizeString_(user.employeeId)) {
+    var linked = '';
+    Object.keys(idMap).forEach(function (key) {
+      if (!linked && idMap[key].indexOf('EMP') === 0) {
+        linked = idMap[key];
+      }
+    });
+    if (linked && userRecord && userRecord.__rowNumber) {
+      try {
+        var schema = resolveSchema_('USERS');
+        var sheet = getSheetBySchema_(schema);
+        var updated = Object.assign({}, userRecord);
+        updated['Employee ID'] = linked;
+        updateSheetRecordByRow_(sheet, userRecord.__rowNumber, schema.columns, updated);
+        user.employeeId = linked;
+      } catch (error) {
+        // Best-effort link so My Tasks can match existing assignments.
+      }
+    }
+  }
+  return idMap;
+}
+
+function staffIdMatches_(value, idMap) {
+  var id = normalizeString_(value).toLowerCase();
+  return Boolean(id && idMap[id]);
+}
+
+function backfillMissingAssignments_(actor, idMap) {
+  var existing = {};
+  safeReadSheetRecords_('TASK_ASSIGNMENTS').forEach(function (record) {
+    var status = normalizeString_(record['Assignment Status']).toLowerCase();
+    if (status === 'cancelled' || status === 'reassigned') {
+      return;
+    }
+    existing[
+      normalizeString_(record['Task ID']) + '|' + normalizeString_(record['Employee ID']).toLowerCase()
+    ] = true;
+  });
+  var canonicalIds = [];
+  Object.keys(idMap).forEach(function (key) {
+    if (canonicalIds.indexOf(idMap[key]) === -1) {
+      canonicalIds.push(idMap[key]);
+    }
+  });
+  safeReadSheetRecords_('TASKS').forEach(function (task) {
+    if (normalizeString_(task['Record Status'] || 'Active').toLowerCase() === 'archived') {
+      return;
+    }
+    var taskId = normalizeString_(task['Task ID']);
+    if (!taskId) {
+      return;
+    }
+    var staffIds = [];
+    if (staffIdMatches_(task['Primary Assignee'], idMap)) {
+      staffIds.push(normalizeString_(task['Primary Assignee']));
+    }
+    getSubtasksForTask_(taskId).forEach(function (subtask) {
+      if (staffIdMatches_(subtask.assignedStaffId, idMap)) {
+        staffIds.push(normalizeString_(subtask.assignedStaffId));
+      }
+    });
+    staffIds.forEach(function (staffId) {
+      var key = taskId + '|' + staffId.toLowerCase();
+      if (existing[key]) {
+        return;
+      }
+      ensureTaskAssignment_(actor, taskId, staffId, staffIdMatches_(task['Primary Assignee'], idMap), {
+        skipNotify: true
+      });
+      existing[key] = true;
+    });
+  });
+}
+
 function listMyTasks(sessionToken, options) {
   try {
     var authContext = requireSession_(
@@ -9,27 +108,38 @@ function listMyTasks(sessionToken, options) {
       ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
       'mytasks'
     );
-    var employeeId = getCurrentEmployeeId_(authContext.user);
     var filters = options || {};
     var query = normalizeString_(filters.query).toLowerCase();
     var view = normalizeString_(filters.view).toLowerCase() || 'all';
     var page = normalizeNumber_(filters.page, 1);
     var pageSize = normalizeNumber_(filters.pageSize, 25);
     var dueSoonDays = getDueSoonDays_();
+    var isStaff = isStaffLikeRole_(authContext.user.role);
+    var idMap = resolveStaffIdMap_(authContext.user, authContext.record);
+    var employeeId = getCurrentEmployeeId_(authContext.user);
 
-    if (!employeeId && isStaffLikeRole_(authContext.user.role)) {
-      return successResponse_('No employee ID is linked to this account yet.', buildPagedResult_([], page, pageSize));
+    if (isStaff && !Object.keys(idMap).length) {
+      var empty = buildPagedResult_([], page, pageSize);
+      empty.unlinked = true;
+      return successResponse_(
+        'Your login is not linked to a Staff record, so assigned work cannot be shown. Ask an administrator to link your account.',
+        empty
+      );
+    }
+
+    if (isStaff) {
+      backfillMissingAssignments_(authContext.user, idMap);
     }
 
     var assignments = readSheetRecords_('TASK_ASSIGNMENTS').filter(function (record) {
-      if (employeeId && normalizeString_(record['Employee ID']) !== employeeId) {
+      var status = normalizeString_(record['Assignment Status']).toLowerCase();
+      if (status === 'reassigned' || status === 'cancelled') {
         return false;
       }
-      if (!employeeId) {
-        return true;
+      if (isStaff || employeeId) {
+        return staffIdMatches_(record['Employee ID'], idMap);
       }
-      var status = normalizeString_(record['Assignment Status']).toLowerCase();
-      return status !== 'reassigned' && status !== 'cancelled';
+      return true;
     });
 
     var tasksById = {};

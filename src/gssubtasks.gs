@@ -45,7 +45,7 @@ function findStaffPerson_(staffId) {
     return null;
   }
   return getAssignablePeople_().find(function (person) {
-    return normalizeString_(person.employeeId) === id;
+    return normalizeString_(person.employeeId).toLowerCase() === id.toLowerCase();
   }) || null;
 }
 

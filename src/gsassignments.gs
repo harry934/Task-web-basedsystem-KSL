@@ -120,7 +120,7 @@ function createSingleAssignment_(actor, input) {
 
     var people = getAssignablePeople_();
     var person = people.find(function (item) {
-      return item.employeeId === employeeId;
+      return normalizeString_(item.employeeId).toLowerCase() === employeeId.toLowerCase();
     });
     if (!person) {
       throw new Error('Employee is not available for assignment.');
@@ -195,16 +195,18 @@ function createSingleAssignment_(actor, input) {
       'Assigned to ' + person.fullName
     );
 
-    var targetUser = findUserByEmployeeId_(employeeId);
-    createNotification_(
-      targetUser ? targetUser['User ID'] : '',
-      employeeId,
-      'Assignment',
-      'New task assignment',
-      'You were assigned to ' + normalizeString_(task['Task Title']) + ' (' + taskId + ').',
-      taskId,
-      'High'
-    );
+    if (!input.skipNotify) {
+      var targetUser = findUserByEmployeeId_(employeeId);
+      createNotification_(
+        targetUser ? targetUser['User ID'] : '',
+        employeeId,
+        'Assignment',
+        'New task assignment',
+        'You were assigned to ' + normalizeString_(task['Task Title']) + ' (' + taskId + ').',
+        taskId,
+        'High'
+      );
+    }
 
     writeAuditLog_(
       actor,
@@ -333,6 +335,47 @@ function deleteAssignment(sessionToken, payload) {
   } catch (error) {
     return errorResponse_(error.message || 'Failed to delete assignment.');
   }
+}
+
+function ensureTaskAssignment_(actor, taskId, employeeId, isPrimary, options) {
+  var id = normalizeString_(employeeId);
+  if (!normalizeString_(taskId) || !id) {
+    return null;
+  }
+  try {
+    return createSingleAssignment_(actor, {
+      taskId: taskId,
+      employeeId: id,
+      isPrimary: Boolean(isPrimary),
+      skipNotify: Boolean(options && options.skipNotify)
+    });
+  } catch (error) {
+    var message = String((error && error.message) || '');
+    if (/already assigned/i.test(message) || /not available for assignment/i.test(message)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function syncAssignmentsForTask_(actor, taskId, primaryAssignee, subtasks, options) {
+  var skipNotify = Boolean(options && options.skipNotify);
+  var primaryId = normalizeString_(primaryAssignee);
+  if (primaryId) {
+    ensureTaskAssignment_(actor, taskId, primaryId, true, { skipNotify: skipNotify });
+  }
+  var seen = {};
+  if (primaryId) {
+    seen[primaryId.toLowerCase()] = true;
+  }
+  (subtasks || []).forEach(function (item) {
+    var staffId = normalizeString_(item && (item.assignedStaffId || item.employeeId));
+    if (!staffId || seen[staffId.toLowerCase()]) {
+      return;
+    }
+    seen[staffId.toLowerCase()] = true;
+    ensureTaskAssignment_(actor, taskId, staffId, false, { skipNotify: skipNotify });
+  });
 }
 
 function mapAssignmentForResponse_(record) {

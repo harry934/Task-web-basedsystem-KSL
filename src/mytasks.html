@@ -157,10 +157,13 @@
       };
     }
 
-    function renderRows() {
+    function renderRows(emptyMessage) {
       var body = document.getElementById('myTasksTableBody');
       if (!state.items.length) {
-        body.innerHTML = '<tr><td colspan="8" class="empty-state">No assigned tasks yet.</td></tr>';
+        body.innerHTML =
+          '<tr><td colspan="8" class="empty-state">' +
+          KSL.escapeHtml(emptyMessage || 'No assigned tasks yet.') +
+          '</td></tr>';
         return;
       }
       body.innerHTML = state.items
@@ -331,7 +334,12 @@
           state.items = payload.items || [];
           state.page = Number((payload.pagination || {}).page || 1);
           state.pages = Number((payload.pagination || {}).pages || 1);
-          renderRows();
+          renderRows(
+            payload.unlinked
+              ? response.message ||
+                'Your login is not linked to a Staff record. Ask an administrator to link your account.'
+              : 'No assigned tasks yet.'
+          );
           renderPagination();
           populateAssignmentSelect();
         })
