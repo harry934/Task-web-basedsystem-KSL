@@ -112,7 +112,7 @@
         </div>
         <div class="field">
           <label for="taskParentInput">Parent task</label>
-          <select id="taskParentInput" class="select"></select>
+          <select id="taskParentInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field">
           <label for="taskPriorityInput">Priority</label>
@@ -122,7 +122,7 @@
           <label for="taskStatusInput">Status</label>
           <select id="taskStatusInput" class="select" required></select>
         </div>
-        <div class="field">
+        <div class="field" id="taskProgressField">
           <label for="taskProgressInput">Progress %</label>
           <input id="taskProgressInput" class="input" type="number" min="0" max="100" value="0" readonly>
           <p class="page-note">Calculated from completed subtasks.</p>
@@ -145,7 +145,7 @@
         </div>
         <div class="field full">
           <label for="taskPrimaryAssigneeInput">Primary assignee (optional)</label>
-          <select id="taskPrimaryAssigneeInput" class="select"></select>
+          <select id="taskPrimaryAssigneeInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field hidden">
           <label for="taskDelayReasonInput">Delay reason</label>
@@ -251,6 +251,10 @@
         })
         .join('');
       selectElement.innerHTML = html;
+      if (entries.length >= 8 || selectElement.getAttribute('data-searchable') === 'true') {
+        selectElement.setAttribute('data-searchable', 'true');
+        KSL.enhanceSearchableSelect(selectElement);
+      }
     }
 
     function getFilters() {
@@ -527,6 +531,7 @@
 
     function openCreateModal() {
       resetTaskForm();
+      document.getElementById('taskProgressField').classList.add('hidden');
       KSL.previewNextId('TSK').then(function (nextId) {
         document.getElementById('taskIdPreviewInput').value = nextId || 'Generated on save';
       });
@@ -585,6 +590,7 @@
         return;
       }
       document.getElementById('taskModalTitle').textContent = 'Edit Task';
+      document.getElementById('taskProgressField').classList.remove('hidden');
       document.getElementById('taskIdInput').value = task.taskId;
       document.getElementById('taskIdPreviewInput').value = task.taskId;
       document.getElementById('taskTitleInput').value = task.taskTitle || '';

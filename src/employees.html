@@ -91,31 +91,31 @@
         </div>
         <div class="field">
           <label for="employeeDepartmentInput">Department</label>
-          <select id="employeeDepartmentInput" class="select" required></select>
+          <select id="employeeDepartmentInput" class="select" data-searchable="true" required></select>
         </div>
         <div class="field">
           <label for="employeeJobTitleInput">Job title</label>
-          <select id="employeeJobTitleInput" class="select"></select>
+          <select id="employeeJobTitleInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field">
           <label for="employeeTypeInput">Employment type</label>
-          <select id="employeeTypeInput" class="select"></select>
+          <select id="employeeTypeInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field">
           <label for="employeeLocationInput">Work location</label>
-          <select id="employeeLocationInput" class="select"></select>
+          <select id="employeeLocationInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field">
           <label for="employeeSectionInput">Section</label>
-          <select id="employeeSectionInput" class="select"></select>
+          <select id="employeeSectionInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field">
           <label for="employeeTeamInput">Team (optional)</label>
-          <select id="employeeTeamInput" class="select"></select>
+          <select id="employeeTeamInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field">
           <label for="employeeSupervisorIdInput">Supervisor</label>
-          <select id="employeeSupervisorIdInput" class="select"></select>
+          <select id="employeeSupervisorIdInput" class="select" data-searchable="true"></select>
         </div>
         <div class="field">
           <label for="employeeDateJoinedInput">Date joined</label>
@@ -180,6 +180,10 @@
       select.innerHTML = html;
       if (selected) {
         select.value = selected;
+      }
+      if (list.length >= 8 || select.getAttribute('data-searchable') === 'true') {
+        select.setAttribute('data-searchable', 'true');
+        KSL.enhanceSearchableSelect(select);
       }
     }
 
@@ -249,7 +253,8 @@
             '<button class="btn btn-outline" type="button" data-action="edit" data-id="' +
             KSL.escapeHtml(item.employeeId) +
             '">Edit</button>' +
-            (String(item.employmentStatus || '').toLowerCase() === 'inactive'
+            (String(item.employmentStatus || '').toLowerCase() === 'inactive' ||
+            !KSL.roleAllowed(KSL.getUserRole(), ['Administrator', 'Manager'])
               ? ''
               : '<button class="btn btn-danger" type="button" data-action="deactivate" data-id="' +
                 KSL.escapeHtml(item.employeeId) +
@@ -449,7 +454,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-      KSL.requireAuth(['Administrator', 'Manager'], function () {
+      KSL.requireAuth(['Administrator', 'Manager', 'Supervisor', 'Team Leader'], function () {
         KSL.call('getEmployeeFormMetadata', KSL.getSessionToken())
           .then(function (response) {
             state.meta = (response && response.data) || {};

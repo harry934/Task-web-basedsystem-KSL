@@ -17,6 +17,7 @@
         <input id="auditUserInput" class="input" type="search" placeholder="User" style="min-width: 130px;">
         <input id="auditModuleInput" class="input" type="search" placeholder="Module" style="min-width: 130px;">
         <input id="auditActionInput" class="input" type="search" placeholder="Action" style="min-width: 120px;">
+        <input id="auditRecordInput" class="input" type="search" placeholder="Record ID" style="min-width: 120px;">
         <input id="auditSearchInput" class="input" type="search" placeholder="Search..." style="min-width: 160px;">
       </div>
     </div>
@@ -58,6 +59,7 @@
         user: document.getElementById('auditUserInput').value.trim(),
         module: document.getElementById('auditModuleInput').value.trim(),
         action: document.getElementById('auditActionInput').value.trim(),
+        recordId: document.getElementById('auditRecordInput').value.trim(),
         query: document.getElementById('auditSearchInput').value.trim(),
         page: state.page,
         pageSize: state.pageSize
@@ -101,7 +103,7 @@
         document.getElementById('auditExportPdfButton').addEventListener('click', function () { exportFile('pdf'); });
         document.getElementById('auditRefreshButton').addEventListener('click', load);
         document.getElementById('auditClearButton').addEventListener('click', function () {
-          ['auditStartInput', 'auditEndInput', 'auditUserInput', 'auditModuleInput', 'auditActionInput', 'auditSearchInput'].forEach(function (id) {
+          ['auditStartInput', 'auditEndInput', 'auditUserInput', 'auditModuleInput', 'auditActionInput', 'auditRecordInput', 'auditSearchInput'].forEach(function (id) {
             document.getElementById(id).value = '';
           });
           state.page = 1;
@@ -110,7 +112,7 @@
         ['auditStartInput', 'auditEndInput'].forEach(function (id) {
           document.getElementById(id).addEventListener('change', function () { state.page = 1; load(); });
         });
-        ['auditUserInput', 'auditModuleInput', 'auditActionInput', 'auditSearchInput'].forEach(function (id) {
+        ['auditUserInput', 'auditModuleInput', 'auditActionInput', 'auditRecordInput', 'auditSearchInput'].forEach(function (id) {
           document.getElementById(id).addEventListener('input', KSL.debounce(function () { state.page = 1; load(); }, 350));
         });
         document.getElementById('auditTableBody').addEventListener('click', function (event) {

@@ -110,6 +110,8 @@
         })
         .join('');
       select.innerHTML = html;
+      select.setAttribute('data-searchable', 'true');
+      KSL.enhanceSearchableSelect(select);
     }
 
     function renderTable() {

@@ -193,6 +193,12 @@
       if (value === 'Employee' || value === 'Staff') {
         return 'Staff';
       }
+      if (value === 'Manager') {
+        return 'RSM';
+      }
+      if (value === 'Team Leader') {
+        return 'Head of Section';
+      }
       return value || '-';
     };
 
@@ -207,6 +213,181 @@
       }
       var isStaff = value === 'Employee' || value === 'Staff';
       return isStaff && (list.indexOf('Employee') > -1 || list.indexOf('Staff') > -1);
+    };
+
+    KSL.enhanceSearchableSelect = function (selectOrId) {
+      var select =
+        typeof selectOrId === 'string' ? document.getElementById(selectOrId) : selectOrId;
+      if (!select || select.tagName !== 'SELECT' || select.multiple) {
+        return;
+      }
+      if (select.options.length < 8 && select.getAttribute('data-searchable') !== 'true') {
+        return;
+      }
+      if (select.dataset.searchableReady === '1') {
+        KSL.refreshSearchableSelect(select);
+        return;
+      }
+
+      var wrap = document.createElement('div');
+      wrap.className = 'searchable-select';
+      select.parentNode.insertBefore(wrap, select);
+      wrap.appendChild(select);
+      select.classList.add('searchable-select-native');
+
+      var display = document.createElement('button');
+      display.type = 'button';
+      display.className = 'searchable-select-display input';
+      display.setAttribute('aria-haspopup', 'listbox');
+
+      var panel = document.createElement('div');
+      panel.className = 'searchable-select-panel hidden';
+      panel.setAttribute('role', 'listbox');
+
+      var search = document.createElement('input');
+      search.type = 'search';
+      search.className = 'input searchable-select-search';
+      search.placeholder = 'Type to search...';
+      search.setAttribute('autocomplete', 'off');
+
+      var list = document.createElement('div');
+      list.className = 'searchable-select-options';
+
+      panel.appendChild(search);
+      panel.appendChild(list);
+      wrap.appendChild(display);
+      wrap.appendChild(panel);
+
+      function selectedLabel() {
+        var option = select.options[select.selectedIndex];
+        return option ? option.textContent : '';
+      }
+
+      function syncDisplay() {
+        display.textContent = selectedLabel() || 'Select…';
+        display.disabled = select.disabled;
+        wrap.classList.toggle('is-disabled', Boolean(select.disabled));
+      }
+
+      function closePanel() {
+        panel.classList.add('hidden');
+        search.value = '';
+      }
+
+      function openPanel() {
+        if (select.disabled) {
+          return;
+        }
+        panel.classList.remove('hidden');
+        renderOptions(search.value);
+        search.focus();
+      }
+
+      function renderOptions(query) {
+        var q = String(query || '')
+          .trim()
+          .toLowerCase();
+        var html = '';
+        var matches = 0;
+        Array.prototype.forEach.call(select.options, function (option, index) {
+          var label = String(option.textContent || '');
+          var value = String(option.value || '');
+          var haystack = (label + ' ' + value).toLowerCase();
+          if (q && haystack.indexOf(q) === -1) {
+            return;
+          }
+          matches += 1;
+          html +=
+            '<button type="button" class="searchable-select-option' +
+            (option.selected ? ' is-selected' : '') +
+            '" data-index="' +
+            index +
+            '">' +
+            KSL.escapeHtml(label || '(blank)') +
+            '</button>';
+        });
+        if (!matches) {
+          html = '<div class="searchable-select-empty">No results found</div>';
+        }
+        list.innerHTML = html;
+      }
+
+      display.addEventListener('click', function (event) {
+        event.preventDefault();
+        if (panel.classList.contains('hidden')) {
+          openPanel();
+        } else {
+          closePanel();
+        }
+      });
+
+      search.addEventListener('input', function () {
+        renderOptions(search.value);
+      });
+
+      list.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-index]');
+        if (!button) {
+          return;
+        }
+        select.selectedIndex = Number(button.getAttribute('data-index'));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        syncDisplay();
+        closePanel();
+      });
+
+      document.addEventListener('click', function (event) {
+        if (!wrap.contains(event.target)) {
+          closePanel();
+        }
+      });
+
+      select.addEventListener('change', syncDisplay);
+      select.dataset.searchableReady = '1';
+      select._searchableSync = syncDisplay;
+      select._searchableRefresh = function () {
+        syncDisplay();
+        if (!panel.classList.contains('hidden')) {
+          renderOptions(search.value);
+        }
+      };
+      var descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+      if (descriptor && descriptor.set) {
+        Object.defineProperty(select, 'value', {
+          configurable: true,
+          enumerable: true,
+          get: function () {
+            return descriptor.get.call(this);
+          },
+          set: function (next) {
+            descriptor.set.call(this, next);
+            syncDisplay();
+          }
+        });
+      }
+      syncDisplay();
+    };
+
+    KSL.refreshSearchableSelect = function (selectOrId) {
+      var select =
+        typeof selectOrId === 'string' ? document.getElementById(selectOrId) : selectOrId;
+      if (!select) {
+        return;
+      }
+      if (select._searchableRefresh) {
+        select._searchableRefresh();
+        return;
+      }
+      KSL.enhanceSearchableSelect(select);
+    };
+
+    KSL.enhanceSearchableSelects = function (root) {
+      var scope = root || document;
+      scope.querySelectorAll('select.select, select[data-searchable="true"]').forEach(function (select) {
+        if (select.options.length >= 8 || select.getAttribute('data-searchable') === 'true') {
+          KSL.enhanceSearchableSelect(select);
+        }
+      });
     };
 
     KSL.fillStaffSelect = function (selectId, people, placeholder, selectedId) {
@@ -249,6 +430,8 @@
         })
         .join('');
       select.innerHTML = html;
+      select.setAttribute('data-searchable', 'true');
+      KSL.enhanceSearchableSelect(select);
     };
 
     KSL.previewNextId = function (prefix) {

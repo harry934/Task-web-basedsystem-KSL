@@ -43,7 +43,8 @@ var PAGE_ROLE_ACCESS = {
   mytasks: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
   tasks: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'],
   assignments: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'],
-  employees: ['Administrator', 'Manager'],
+  deployment: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
+  employees: ['Administrator', 'Manager', 'Supervisor', 'Team Leader'],
   teams: ['Administrator', 'Manager'],
   departments: ['Administrator', 'Manager'],
   progress: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff'],
@@ -59,6 +60,80 @@ var PAGE_ROLE_ACCESS = {
   settings: ['Administrator'],
   login: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Employee', 'Staff']
 };
+
+/** Spec mapping (stored roles unchanged): Admin=Admin Officer, Manager=RSM, Supervisor/Team Leader=Head of Section. */
+function isSectionHeadRole_(role) {
+  var value = normalizeString_(role);
+  return value === 'Supervisor' || value === 'Team Leader' || value === 'Administrator' || value === 'Manager';
+}
+
+function isRsmRole_(role) {
+  var value = normalizeString_(role);
+  return value === 'Manager' || value === 'Administrator';
+}
+
+function isAdminOfficerRole_(role) {
+  return normalizeString_(role) === 'Administrator';
+}
+
+function canManageAllLocations_(role) {
+  return isAdminOfficerRole_(role) || normalizeString_(role) === 'Manager';
+}
+
+function enrichUserOperationalScope_(user) {
+  if (!user) {
+    return user;
+  }
+  var location = '';
+  var section = '';
+  var department = normalizeString_(user.department);
+  var employeeId = normalizeString_(user.employeeId);
+  if (employeeId) {
+    try {
+      var employees = safeReadSheetRecords_('EMPLOYEES');
+      var match = employees.find(function (record) {
+        return normalizeString_(record['Employee ID']) === employeeId;
+      });
+      if (match) {
+        location = normalizeString_(match['Work Location']);
+        section = normalizeString_(match.Section);
+        if (!department) {
+          department = normalizeString_(match.Department);
+        }
+      }
+    } catch (error) {
+      location = '';
+    }
+  }
+  user.workLocation = location;
+  user.section = section;
+  user.department = department;
+  user.canManageAllLocations = canManageAllLocations_(user.role);
+  return user;
+}
+
+function userCanAccessStaffRecord_(user, record) {
+  if (!user || !record) {
+    return false;
+  }
+  if (canManageAllLocations_(user.role)) {
+    return true;
+  }
+  if (isStaffLikeRole_(user.role)) {
+    return normalizeString_(record['Employee ID']) === normalizeString_(user.employeeId);
+  }
+  var userDept = normalizeString_(user.department).toLowerCase();
+  var userLoc = normalizeString_(user.workLocation).toLowerCase();
+  var recordDept = normalizeString_(record.Department).toLowerCase();
+  var recordLoc = normalizeString_(record['Work Location'] || record.Location).toLowerCase();
+  if (userDept && recordDept && userDept !== recordDept) {
+    return false;
+  }
+  if (userLoc && recordLoc && userLoc !== recordLoc) {
+    return false;
+  }
+  return true;
+}
 
 function isStaffLikeRole_(role) {
   var value = normalizeString_(role);
@@ -942,7 +1017,7 @@ function mapUserRecordToSessionUser_(record) {
   } catch (error) {
     credential = null;
   }
-  return {
+  return enrichUserOperationalScope_({
     userId: normalizeString_(record['User ID']),
     googleSubjectId: normalizeString_(record['Google Subject ID']),
     email: normalizeEmail_(record['Google Email']),
@@ -953,7 +1028,11 @@ function mapUserRecordToSessionUser_(record) {
       ? 'Super Admin'
       : isStaffLikeRole_(record.Role)
         ? 'Staff'
-        : normalizeString_(record.Role),
+        : normalizeString_(record.Role) === 'Manager'
+          ? 'RSM'
+          : normalizeString_(record.Role) === 'Team Leader'
+            ? 'Head of Section'
+            : normalizeString_(record.Role),
     isSuperAdmin: isSuperAdminUser_(record['User ID']),
     accountStatus: normalizeString_(record['Account Status']),
     employeeId: normalizeString_(record['Employee ID']),
@@ -961,7 +1040,7 @@ function mapUserRecordToSessionUser_(record) {
     jobTitle: normalizeString_(record['Job Title']),
     profilePhoto: normalizeString_(record['Profile Photo']),
     mustChangePassword: credentialMustChangePassword_(credential)
-  };
+  });
 }
 
 function isActiveAccountStatus_(accountStatus) {

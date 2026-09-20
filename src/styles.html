@@ -725,6 +725,103 @@
     min-height: 120px;
   }
 
+  .searchable-select {
+    position: relative;
+    width: 100%;
+  }
+
+  .searchable-select-native {
+    position: absolute !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+  }
+
+  .searchable-select-display {
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .searchable-select.is-disabled .searchable-select-display {
+    opacity: 0.65;
+    cursor: not-allowed;
+    background: #f3f5f7;
+  }
+
+  .searchable-select-panel {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--white);
+    border: 1px solid #b8c2cc;
+    border-radius: 2px;
+    box-shadow: 0 10px 24px rgba(11, 31, 58, 0.12);
+    padding: 8px;
+  }
+
+  .searchable-select-search {
+    margin-bottom: 6px;
+  }
+
+  .searchable-select-options {
+    max-height: 220px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .searchable-select-option {
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 8px 10px;
+    font: inherit;
+    cursor: pointer;
+    color: var(--navy);
+  }
+
+  .searchable-select-option:hover,
+  .searchable-select-option.is-selected {
+    background: #eef3f8;
+  }
+
+  .searchable-select-empty {
+    padding: 10px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .deployment-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .deployment-entry-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1fr auto;
+    gap: 8px;
+    align-items: end;
+    padding: 10px;
+    border: 1px solid #d7dee6;
+    background: #f8fafc;
+  }
+
+  @media (max-width: 960px) {
+    .deployment-entry-row {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .textarea {
     min-height: 96px;
     resize: vertical;

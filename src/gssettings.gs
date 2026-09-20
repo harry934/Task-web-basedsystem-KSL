@@ -228,7 +228,8 @@ function dimensionUsageTargets_(column) {
     'Task Statuses': [{ schema: 'TASKS', field: 'Status' }],
     'Delay Reasons': [{ schema: 'TASKS', field: 'Delay Reason' }],
     'Work Locations': [{ schema: 'EMPLOYEES', field: 'Work Location' }],
-    'Employment Types': [{ schema: 'EMPLOYEES', field: 'Employment Type' }]
+    'Employment Types': [{ schema: 'EMPLOYEES', field: 'Employment Type' }],
+    'Duty Statuses': [{ schema: 'STAFF_DEPLOYMENT_ENTRIES', field: 'Duty Status' }]
   };
   return map[column] || [];
 }

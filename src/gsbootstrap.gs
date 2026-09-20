@@ -134,6 +134,7 @@ var KSL_SLICE1_SCHEMAS = {
       'Completion Reasons',
       'Work Locations',
       'Employment Types',
+      'Duty Statuses',
       'Performance Ratings',
       'Notification Types',
       'Roles',
@@ -490,6 +491,59 @@ var KSL_SLICE1_SCHEMAS = {
       'Review Date',
       'Reviewed By'
     ]
+  },
+  STAFF_DEPLOYMENT_BATCHES: {
+    key: 'STAFF_DEPLOYMENT_BATCHES',
+    sheetName: 'StaffDeploymentBatches',
+    rangeName: 'RANGESTAFFDEPLOYMENTBATCHES',
+    columns: [
+      'Batch ID',
+      'Operational Date',
+      'Department',
+      'Section',
+      'Location',
+      'Workflow Status',
+      'Submitted By',
+      'Submitted By Name',
+      'Submitted At',
+      'RSM By',
+      'RSM By Name',
+      'RSM At',
+      'RSM Comment',
+      'Approval File Name',
+      'Approval File URL',
+      'Approval File ID',
+      'Admin By',
+      'Admin By Name',
+      'Admin At',
+      'Admin Comment',
+      'Created Date',
+      'Created By',
+      'Updated Date',
+      'Updated By'
+    ]
+  },
+  STAFF_DEPLOYMENT_ENTRIES: {
+    key: 'STAFF_DEPLOYMENT_ENTRIES',
+    sheetName: 'StaffDeploymentEntries',
+    rangeName: 'RANGESTAFFDEPLOYMENTENTRIES',
+    columns: [
+      'Entry ID',
+      'Batch ID',
+      'Operational Date',
+      'Employee ID',
+      'Employee Name',
+      'Department',
+      'Section',
+      'Location',
+      'Duty Status',
+      'Destination',
+      'Notes',
+      'Created Date',
+      'Created By',
+      'Updated Date',
+      'Updated By'
+    ]
   }
 };
 
@@ -509,6 +563,7 @@ function bootstrapMvpSlice1Database() {
   });
 
   seedDimensionsDefaults_();
+  ensureRequiredDimensionValues_();
   seedSettingsDefaults_();
   ensureMissingSettings_();
 
@@ -520,6 +575,62 @@ function bootstrapMvpSlice1Database() {
       sheets: result
     }
   };
+}
+
+function ensureRequiredDimensionValues_() {
+  var required = {
+    'Employment Types': ['Casual'],
+    'Work Locations': ['Mombasa', 'Kisumu'],
+    'Duty Statuses': ['On Duty', 'Off Duty', 'On Leave', 'Absent', 'Other']
+  };
+  Object.keys(required).forEach(function (columnName) {
+    required[columnName].forEach(function (value) {
+      ensureDimensionValueExists_(columnName, value);
+    });
+  });
+}
+
+function ensureDimensionValueExists_(columnName, value) {
+  var schema = resolveSchema_('DIMENSIONS');
+  var sheet = getSheetBySchema_(schema);
+  var columns = schema.columns;
+  var columnIndex = columns.indexOf(columnName);
+  if (columnIndex < 0) {
+    return;
+  }
+  var target = normalizeString_(value);
+  if (!target) {
+    return;
+  }
+  var records = readSheetRecords_(schema);
+  var exists = records.some(function (record) {
+    var raw = normalizeString_(record[columnName]);
+    if (!raw) {
+      return false;
+    }
+    if (raw.indexOf(INACTIVE_DIMENSION_PREFIX_) === 0) {
+      raw = normalizeString_(raw.slice(INACTIVE_DIMENSION_PREFIX_.length));
+    }
+    return raw.toLowerCase() === target.toLowerCase();
+  });
+  if (exists) {
+    return;
+  }
+  var emptyRow = records.find(function (record) {
+    return !normalizeString_(record[columnName]);
+  });
+  if (emptyRow && emptyRow.__rowNumber) {
+    var updated = Object.assign({}, emptyRow);
+    updated[columnName] = target;
+    updateSheetRecordByRow_(sheet, emptyRow.__rowNumber, columns, updated);
+  } else {
+    var payload = {};
+    columns.forEach(function (column) {
+      payload[column] = column === columnName ? target : '';
+    });
+    appendSheetRecord_(sheet, columns, payload);
+  }
+  clearSettingsAndDimensionsCache_();
 }
 
 function ensureSheetSchema_(spreadsheet, schema) {
@@ -853,10 +964,19 @@ function getDimensionSeedMap_() {
     'Progress Statuses': ['On Track', 'At Risk', 'Delayed', 'Completed'],
     'Delay Reasons': ['Awaiting Materials', 'Awaiting Approval', 'Resource Constraint', 'Technical Issue'],
     'Completion Reasons': ['Completed As Planned', 'Completed With Delay', 'Partially Completed'],
-    'Work Locations': ['Main Yard', 'Dry Dock', 'Workshop', 'Office'],
-    'Employment Types': ['Permanent', 'Contract', 'Intern'],
+    'Work Locations': ['Mombasa', 'Kisumu', 'Main Yard', 'Dry Dock', 'Workshop', 'Office'],
+    'Employment Types': ['Permanent', 'Contract', 'Casual', 'Intern'],
+    'Duty Statuses': ['On Duty', 'Off Duty', 'On Leave', 'Absent', 'Other'],
     'Performance Ratings': ['Excellent', 'Good', 'Satisfactory', 'Needs Improvement'],
-    'Notification Types': ['Assignment', 'Due Soon', 'Overdue', 'Progress Review', 'Account', 'System'],
+    'Notification Types': [
+      'Assignment',
+      'Due Soon',
+      'Overdue',
+      'Progress Review',
+      'Account',
+      'System',
+      'Deployment'
+    ],
     Roles: ['Administrator', 'Manager', 'Supervisor', 'Team Leader', 'Staff'],
     'Account Statuses': ['Active', 'Suspended', 'Disabled']
   };

@@ -1,8 +1,11 @@
-var EMPLOYEE_ACCESS_ROLES = ['Administrator', 'Manager'];
+var EMPLOYEE_ACCESS_ROLES = ['Administrator', 'Manager', 'Supervisor', 'Team Leader'];
 
 function listEmployees(sessionToken, options) {
   try {
-    requireSession_(sessionToken, EMPLOYEE_ACCESS_ROLES, 'employees');
+    var authContext = requireSession_(sessionToken, EMPLOYEE_ACCESS_ROLES, 'employees');
+    try {
+      ensureRequiredDimensionValues_();
+    } catch (ignore) {}
     var filters = options || {};
     var query = normalizeString_(filters.query).toLowerCase();
     var statusFilter = normalizeString_(filters.status).toLowerCase();
@@ -13,6 +16,9 @@ function listEmployees(sessionToken, options) {
 
     var items = readSheetRecords_('EMPLOYEES')
       .filter(function (record) {
+        if (!userCanAccessStaffRecord_(authContext.user, record)) {
+          return false;
+        }
         var status = normalizeString_(record['Employment Status'] || 'Active').toLowerCase();
         var department = normalizeString_(record.Department).toLowerCase();
         var searchText = [
@@ -21,7 +27,9 @@ function listEmployees(sessionToken, options) {
           record['Full Name'],
           record.Email,
           record['Job Title'],
-          record.Department
+          record.Department,
+          record['Work Location'],
+          record['Employment Type']
         ]
           .join(' ')
           .toLowerCase();
@@ -59,7 +67,10 @@ function listEmployees(sessionToken, options) {
 
 function getEmployeeFormMetadata(sessionToken) {
   try {
-    requireSession_(sessionToken, EMPLOYEE_ACCESS_ROLES, 'employees');
+    var authContext = requireSession_(sessionToken, EMPLOYEE_ACCESS_ROLES, 'employees');
+    try {
+      ensureRequiredDimensionValues_();
+    } catch (ignore) {}
     var dimensions = getDimensionValuesMap_();
     var departments = [];
     try {
@@ -78,7 +89,10 @@ function getEmployeeFormMetadata(sessionToken) {
     try {
       staffOptions = readSheetRecords_('EMPLOYEES')
         .filter(function (record) {
-          return normalizeString_(record['Employment Status']).toLowerCase() !== 'inactive';
+          if (normalizeString_(record['Employment Status']).toLowerCase() === 'inactive') {
+            return false;
+          }
+          return userCanAccessStaffRecord_(authContext.user, record);
         })
         .map(mapEmployeeForResponse_);
     } catch (staffError) {
@@ -102,6 +116,15 @@ function getEmployeeFormMetadata(sessionToken) {
       teams = dimensions.Teams || [];
     }
 
+    if (!canManageAllLocations_(authContext.user.role) && authContext.user.department) {
+      departments = departments.filter(function (name) {
+        return normalizeString_(name).toLowerCase() === normalizeString_(authContext.user.department).toLowerCase();
+      });
+      if (!departments.length) {
+        departments = [authContext.user.department];
+      }
+    }
+
     return successResponse_('Employee form metadata loaded.', {
       departments: departments,
       jobTitles: dimensions['Job Titles'] || [],
@@ -109,7 +132,12 @@ function getEmployeeFormMetadata(sessionToken) {
       workLocations: dimensions['Work Locations'] || [],
       sections: dimensions.Sections || [],
       teams: teams,
-      staff: staffOptions
+      staff: staffOptions,
+      scope: {
+        department: authContext.user.department || '',
+        location: authContext.user.workLocation || '',
+        canManageAll: canManageAllLocations_(authContext.user.role)
+      }
     });
   } catch (error) {
     return errorResponse_(error.message || 'Failed to load employee form options.');
@@ -127,6 +155,25 @@ function createEmployee(sessionToken, payload) {
     }
     if (!department) {
       throw new Error('Department is required.');
+    }
+    var workLocation = normalizeString_(input.workLocation);
+    if (!canManageAllLocations_(authContext.user.role)) {
+      if (
+        authContext.user.department &&
+        department.toLowerCase() !== normalizeString_(authContext.user.department).toLowerCase()
+      ) {
+        throw new Error('You can only add staff in your own department.');
+      }
+      if (
+        authContext.user.workLocation &&
+        workLocation &&
+        workLocation.toLowerCase() !== normalizeString_(authContext.user.workLocation).toLowerCase()
+      ) {
+        throw new Error('You can only add staff in your own location.');
+      }
+      if (!workLocation && authContext.user.workLocation) {
+        workLocation = authContext.user.workLocation;
+      }
     }
     var phone = normalizeKenyaPhone_(input.phone);
 
@@ -174,7 +221,7 @@ function createEmployee(sessionToken, payload) {
       Team: normalizeString_(input.team),
       'Employment Status': normalizeString_(input.employmentStatus || 'Active'),
       'Date Joined': input.dateJoined ? safeDateFromInput_(input.dateJoined, 'Date Joined') : now,
-      'Work Location': normalizeString_(input.workLocation),
+      'Work Location': workLocation,
       'Profile Photo': '',
       'Active Tasks': 0,
       'Completed Tasks': 0,
@@ -248,6 +295,19 @@ function updateEmployee(sessionToken, payload) {
     if (!current) {
       throw new Error('Employee was not found.');
     }
+    if (!userCanAccessStaffRecord_(authContext.user, current)) {
+      throw new Error('You do not have access to this staff record.');
+    }
+
+    var nextStatus =
+      normalizeString_(input.employmentStatus).toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
+    if (
+      nextStatus === 'Inactive' &&
+      normalizeString_(current['Employment Status']).toLowerCase() !== 'inactive' &&
+      !canManageAllLocations_(authContext.user.role)
+    ) {
+      throw new Error('Only Admin/RSM can mark staff Inactive.');
+    }
 
     var email = normalizeEmail_(input.email);
     if (findUserByEmployeeId_(employeeId) && !email) {
@@ -284,8 +344,7 @@ function updateEmployee(sessionToken, payload) {
       return supervisor ? supervisor.fullName : normalizeString_(input.supervisorName);
     })();
     updated.Team = normalizeString_(input.team);
-    updated['Employment Status'] =
-      normalizeString_(input.employmentStatus).toLowerCase() === 'inactive' ? 'Inactive' : 'Active';
+    updated['Employment Status'] = nextStatus;
     if (input.dateJoined) {
       updated['Date Joined'] = safeDateFromInput_(input.dateJoined, 'Date Joined');
     }
@@ -324,7 +383,7 @@ function updateEmployee(sessionToken, payload) {
 
 function deactivateEmployee(sessionToken, payload) {
   try {
-    var authContext = requireSession_(sessionToken, EMPLOYEE_ACCESS_ROLES, 'employees');
+    var authContext = requireSession_(sessionToken, ['Administrator', 'Manager'], 'employees');
     var employeeId = normalizeString_(payload && payload.employeeId);
     if (!employeeId) {
       throw new Error('employeeId is required.');
