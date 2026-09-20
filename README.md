@@ -1,53 +1,40 @@
 # Kenya Shipyards Limited Tasks Management System
 
-Web app for planning, assigning, tracking, and reviewing work at Kenya Shipyards Limited.
+Web app for planning, assigning, tracking, reviewing work, and daily staff deployment at Kenya Shipyards Limited.
 
-- **Frontend:** HTML pages inside a shared Apps Script template
-- **Backend:** Google Apps Script
+- **Frontend / backend:** Google Apps Script (kept **local**, not in this GitHub repo)
 - **Database:** Google Sheets (Africa/Nairobi)
-
-There is **one Sign in page** for Administrator and Staff. After an admin creates a staff record and a username, that person signs in on the same page.
+- **This repository:** documentation, branding assets, and deployment notes only
 
 **Live app (share this in email):**  
 https://script.google.com/a/*/macros/s/AKfycbzn34cAzmEzRipA4Y2omX8psx4O0OPEWpOoufIkMqK2Mp-bz7I2Tz-yicHosAoRj3f2Pw/exec
 
-Send that `/exec` web app link only. Do not send a Google Sheet, Drive file, Apps Script editor, `/dev`, or `usercontent.com` URL — those show Google Drive’s “Sorry, unable to open the file at present” page. If a recipient is signed into several Google accounts, ask them to open the link in a private/incognito window.
+Send that `/exec` web app link only. Do not send a Google Sheet, Drive file, Apps Script editor, `/dev`, or `usercontent.com` URL.
 
-## Repository layout
+## What is on GitHub
 
 ```text
 .
-├── README.md                 GitHub landing page
+├── README.md                 This landing page
 ├── .gitignore
-├── .clasp.json.example       Copy to .clasp.json and set your script ID
+├── .clasp.json.example       Local clasp setup template (script ID not committed)
 ├── assets/                   Branding (logo)
-├── docs/                     Guides and compliance notes
-│   ├── FEATURES.md           What each page does; Admin vs Staff
-│   ├── PROMPT_COMPLIANCE_AUDIT.md
-│   └── PROMPT_29_COPY_PASTE_CHECKLIST.md
-└── src/                      Apps Script project (clasp rootDir)
-    ├── appsscript.json
-    ├── gstemplate.gs         Routing and doGet
-    ├── gs*.gs                Server modules
-    ├── template.html         Shared shell
-    ├── styles.html
-    ├── scripts.html
-    └── *.html                Page fragments (login, dashboard, tasks, …)
+└── docs/                     Guides, compliance notes, and specs
 ```
 
-`src/` stays flat on purpose. Apps Script `include('styles')` and `createHtmlOutputFromFile('login')` use the file name only, so nested folders inside `src/` would break the app.
+Apps Script sources (`src/*.gs`, `src/*.html`, `appsscript.json`) are **intentionally excluded** from GitHub. Deploy the running app with **clasp** from your local machine.
 
 ## Documentation
 
 | File | What it covers |
 |---|---|
-| [docs/FEATURES.md](docs/FEATURES.md) | Sign-in, roles, every dashboard page, Admin vs Staff |
+| [docs/FEATURES.md](docs/FEATURES.md) | Sign-in, roles, pages, Admin vs Staff |
 | [docs/PROMPT_COMPLIANCE_AUDIT.md](docs/PROMPT_COMPLIANCE_AUDIT.md) | Prompt-by-prompt build audit |
 | [docs/PROMPT_29_COPY_PASTE_CHECKLIST.md](docs/PROMPT_29_COPY_PASTE_CHECKLIST.md) | Manual test / deploy checklist |
 
-## Push and deploy (clasp)
+## Local Apps Script deploy (clasp)
 
-From the repository root (not from `src/`):
+On a machine that has the private `src/` project folder:
 
 ```bash
 cp .clasp.json.example .clasp.json
@@ -59,17 +46,13 @@ clasp deploy -i YOUR_DEPLOYMENT_ID -V VERSION
 
 Then hard-refresh the `/exec` URL (`Ctrl+F5`).
 
-Page fragments in `src/*.html` are not standalone websites. Always open the deployed web app URL.
-
 ## First-time Apps Script setup
 
 1. Create or open the Google Sheet used as the database.
 2. Bind or point the script at that sheet (`DATABASE_SPREADSHEET_ID` in Script properties if needed).
-3. Push this `src/` folder with clasp.
-4. In the Apps Script editor run `bootstrapMvpSlice1Database`, then create the first administrator from **Users** (or the bootstrap helpers).
-5. Deploy as a web app. This project uses username/password (not Google sign-in).
-
-Public self-registration is disabled. Only an administrator creates Staff records and User logins.
+3. Push the local `src/` folder with clasp.
+4. In the Apps Script editor run `bootstrapMvpSlice1Database`, then create the first administrator.
+5. Deploy as a web app (username/password auth).
 
 ## Branding
 

@@ -8,3 +8,7 @@ spec_extracted.txt
 _docx_extract.txt
 *.docx
 !docs/spec/*.docx
+
+# Apps Script project stays local for clasp; do not publish to GitHub
+src/
+.claspignore
