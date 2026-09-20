@@ -2,147 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Kenya Shipyards Limited Tasks Management System" />
-    <title>KSL Tasks Management System</title>
-    <link rel="icon" href="assets/ksl-logo.png" />
-    <style>
-      :root {
-        --navy: #0b1f3a;
-        --navy-mid: #123056;
-        --gold: #c5a028;
-        --white: #ffffff;
-        --muted: #d7dee6;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
-      body {
-        height: 100%;
-        margin: 0;
-      }
-
-      body {
-        font-family: "Segoe UI", "Source Sans 3", Arial, sans-serif;
-        color: var(--white);
-        background:
-          radial-gradient(ellipse at top, rgba(197, 160, 40, 0.18), transparent 45%),
-          linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 55%, #071426 100%);
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-      }
-
-      .card {
-        width: min(440px, 100%);
-        text-align: center;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-top: 3px solid var(--gold);
-        padding: 36px 28px 28px;
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-      }
-
-      .logo {
-        width: 72px;
-        height: 72px;
-        object-fit: contain;
-        background: var(--white);
-        border-radius: 4px;
-        padding: 6px;
-        margin: 0 auto 18px;
-        display: block;
-      }
-
-      h1 {
-        margin: 0 0 6px;
-        font-size: 22px;
-        font-weight: 700;
-        letter-spacing: 0.01em;
-      }
-
-      .subtitle {
-        margin: 0 0 22px;
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.45;
-      }
-
-      .btn {
-        display: inline-block;
-        appearance: none;
-        border: 0;
-        background: var(--gold);
-        color: var(--navy);
-        font: inherit;
-        font-size: 15px;
-        font-weight: 700;
-        padding: 12px 22px;
-        text-decoration: none;
-        cursor: pointer;
-        border-radius: 2px;
-        min-width: 200px;
-      }
-
-      .btn:hover {
-        filter: brightness(1.06);
-      }
-
-      .hint {
-        margin: 16px 0 0;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      noscript .btn {
-        margin-top: 8px;
-      }
-    </style>
+    <meta
+      http-equiv="refresh"
+      content="0;url=https://script.google.com/a/*/macros/s/AKfycbwUz5HsPL4O76bxFe_HxCCWZamQ3-LkjXN7OtfWfQRGFHM5Fqn4TW0huPRZNMphVT7Hxw/exec?page=login"
+    />
+    <title>KSL Tasks — Redirecting</title>
+    <script>
+      location.replace(
+        "https://script.google.com/a/*/macros/s/AKfycbwUz5HsPL4O76bxFe_HxCCWZamQ3-LkjXN7OtfWfQRGFHM5Fqn4TW0huPRZNMphVT7Hxw/exec?page=login"
+      );
+    </script>
   </head>
   <body>
-    <main class="card">
-      <img class="logo" src="assets/ksl-logo.png" alt="Kenya Shipyards Limited logo" />
-      <h1>Kenya Shipyards Limited</h1>
-      <p class="subtitle">Tasks Management System — continue to Sign in</p>
+    <p>
       <a
-        class="btn"
-        id="continueBtn"
         href="https://script.google.com/a/*/macros/s/AKfycbwUz5HsPL4O76bxFe_HxCCWZamQ3-LkjXN7OtfWfQRGFHM5Fqn4TW0huPRZNMphVT7Hxw/exec?page=login"
         >Continue to Sign in</a
       >
-      <p class="hint" id="hint">Opening the live app…</p>
-    </main>
-    <script>
-      (function () {
-        var APP_URL =
-          "https://script.google.com/a/*/macros/s/AKfycbwUz5HsPL4O76bxFe_HxCCWZamQ3-LkjXN7OtfWfQRGFHM5Fqn4TW0huPRZNMphVT7Hxw/exec?page=login";
-        var btn = document.getElementById("continueBtn");
-        var hint = document.getElementById("hint");
-        btn.href = APP_URL;
-
-        // Top-level navigation (iframe embeds of Apps Script usually fail).
-        var seconds = 2;
-        hint.textContent = "Opening the live app in " + seconds + "s…";
-        var timer = setInterval(function () {
-          seconds -= 1;
-          if (seconds <= 0) {
-            clearInterval(timer);
-            hint.textContent = "Redirecting…";
-            window.location.replace(APP_URL);
-            return;
-          }
-          hint.textContent = "Opening the live app in " + seconds + "s…";
-        }, 1000);
-
-        btn.addEventListener("click", function () {
-          clearInterval(timer);
-        });
-      })();
-    </script>
+    </p>
   </body>
 </html>
