@@ -3,12 +3,13 @@ Thumbs.db
 *.log
 .env
 .clasp.json
+.clasp.json.example
+.claspignore
 node_modules/
 spec_extracted.txt
 _docx_extract.txt
 *.docx
-!docs/spec/*.docx
 
-# Apps Script project stays local for clasp; do not publish to GitHub
+# Local only — not published to GitHub
 src/
-.claspignore
+docs/

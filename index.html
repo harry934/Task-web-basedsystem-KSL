@@ -12,8 +12,7 @@
         --navy-mid: #123056;
         --gold: #c5a028;
         --white: #ffffff;
-        --muted: #5b6775;
-        --page: #f4f6f8;
+        --muted: #d7dee6;
       }
 
       * {
@@ -28,247 +27,121 @@
 
       body {
         font-family: "Segoe UI", "Source Sans 3", Arial, sans-serif;
-        background: var(--page);
-        color: var(--navy);
-      }
-
-      .shell {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
+        color: var(--white);
+        background:
+          radial-gradient(ellipse at top, rgba(197, 160, 40, 0.18), transparent 45%),
+          linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 55%, #071426 100%);
         min-height: 100vh;
-      }
-
-      .topbar {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 10px 16px;
-        background: linear-gradient(90deg, var(--navy) 0%, var(--navy-mid) 100%);
-        color: var(--white);
-        border-bottom: 3px solid var(--gold);
-        flex-shrink: 0;
-      }
-
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-width: 0;
-      }
-
-      .brand img {
-        width: 40px;
-        height: 40px;
-        object-fit: contain;
-        background: var(--white);
-        border-radius: 2px;
-        padding: 2px;
-      }
-
-      .brand-text strong {
-        display: block;
-        font-size: 14px;
-        letter-spacing: 0.02em;
-      }
-
-      .brand-text span {
-        display: block;
-        font-size: 12px;
-        opacity: 0.85;
-      }
-
-      .actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
-      }
-
-      .btn {
-        appearance: none;
-        border: 1px solid rgba(255, 255, 255, 0.35);
-        background: transparent;
-        color: var(--white);
-        padding: 8px 12px;
-        font: inherit;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        text-decoration: none;
-        border-radius: 2px;
-      }
-
-      .btn:hover {
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      .btn-primary {
-        background: var(--gold);
-        border-color: var(--gold);
-        color: var(--navy);
-      }
-
-      .btn-primary:hover {
-        filter: brightness(1.05);
-      }
-
-      .frame-wrap {
-        position: relative;
-        flex: 1;
-        min-height: 0;
-        background: var(--white);
-      }
-
-      iframe {
-        width: 100%;
-        height: 100%;
-        border: 0;
-        display: block;
-        background: var(--white);
-      }
-
-      .fallback {
-        display: none;
-        position: absolute;
-        inset: 0;
         align-items: center;
         justify-content: center;
         padding: 24px;
-        background: var(--page);
+      }
+
+      .card {
+        width: min(440px, 100%);
         text-align: center;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-top: 3px solid var(--gold);
+        padding: 36px 28px 28px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
       }
 
-      .fallback.show {
-        display: flex;
-      }
-
-      .fallback-card {
-        max-width: 460px;
+      .logo {
+        width: 72px;
+        height: 72px;
+        object-fit: contain;
         background: var(--white);
-        border: 1px solid #d7dde5;
-        padding: 28px 24px;
-        box-shadow: 0 10px 28px rgba(11, 31, 58, 0.08);
+        border-radius: 4px;
+        padding: 6px;
+        margin: 0 auto 18px;
+        display: block;
       }
 
-      .fallback-card h1 {
-        margin: 0 0 8px;
-        font-size: 20px;
-        color: var(--navy);
+      h1 {
+        margin: 0 0 6px;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
       }
 
-      .fallback-card p {
-        margin: 0 0 18px;
+      .subtitle {
+        margin: 0 0 22px;
         color: var(--muted);
         font-size: 14px;
-        line-height: 1.5;
+        line-height: 1.45;
       }
 
-      .fallback-card .btn-primary {
+      .btn {
         display: inline-block;
+        appearance: none;
+        border: 0;
+        background: var(--gold);
+        color: var(--navy);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 700;
+        padding: 12px 22px;
+        text-decoration: none;
+        cursor: pointer;
+        border-radius: 2px;
+        min-width: 200px;
       }
 
-      @media (max-width: 720px) {
-        .brand-text strong {
-          font-size: 12px;
-        }
+      .btn:hover {
+        filter: brightness(1.06);
+      }
 
-        .brand-text span {
-          display: none;
-        }
+      .hint {
+        margin: 16px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
 
-        .btn-label {
-          display: none;
-        }
+      noscript .btn {
+        margin-top: 8px;
       }
     </style>
   </head>
   <body>
-    <div class="shell">
-      <header class="topbar">
-        <div class="brand">
-          <img src="assets/ksl-logo.png" alt="Kenya Shipyards Limited logo" />
-          <div class="brand-text">
-            <strong>Kenya Shipyards Limited</strong>
-            <span>Tasks Management System</span>
-          </div>
-        </div>
-        <div class="actions">
-          <button class="btn" type="button" id="reloadBtn" title="Reload app">Reload</button>
-          <a class="btn btn-primary" id="openBtn" href="#" target="_blank" rel="noopener">
-            Open <span class="btn-label">in new tab</span>
-          </a>
-        </div>
-      </header>
-
-      <div class="frame-wrap">
-        <iframe
-          id="appFrame"
-          title="KSL Tasks Management System"
-          allow="clipboard-read; clipboard-write"
-          referrerpolicy="no-referrer-when-downgrade"
-        ></iframe>
-        <div class="fallback" id="fallback">
-          <div class="fallback-card">
-            <h1>Open the KSL app</h1>
-            <p>
-              If the embedded view does not load in your browser, open the live application in a new
-              tab. Use the same Sign in page for Administrator and Staff.
-            </p>
-            <a class="btn btn-primary" id="fallbackOpen" href="#" target="_blank" rel="noopener"
-              >Launch application</a
-            >
-          </div>
-        </div>
-      </div>
-    </div>
-
+    <main class="card">
+      <img class="logo" src="assets/ksl-logo.png" alt="Kenya Shipyards Limited logo" />
+      <h1>Kenya Shipyards Limited</h1>
+      <p class="subtitle">Tasks Management System — continue to Sign in</p>
+      <a
+        class="btn"
+        id="continueBtn"
+        href="https://script.google.com/a/*/macros/s/AKfycbwUz5HsPL4O76bxFe_HxCCWZamQ3-LkjXN7OtfWfQRGFHM5Fqn4TW0huPRZNMphVT7Hxw/exec?page=login"
+        >Continue to Sign in</a
+      >
+      <p class="hint" id="hint">Opening the live app…</p>
+    </main>
     <script>
       (function () {
-        // Clean production /exec URL (no cache-buster). Entry page = login.
         var APP_URL =
           "https://script.google.com/a/*/macros/s/AKfycbwUz5HsPL4O76bxFe_HxCCWZamQ3-LkjXN7OtfWfQRGFHM5Fqn4TW0huPRZNMphVT7Hxw/exec?page=login";
+        var btn = document.getElementById("continueBtn");
+        var hint = document.getElementById("hint");
+        btn.href = APP_URL;
 
-        var frame = document.getElementById("appFrame");
-        var openBtn = document.getElementById("openBtn");
-        var fallbackOpen = document.getElementById("fallbackOpen");
-        var reloadBtn = document.getElementById("reloadBtn");
-        var fallback = document.getElementById("fallback");
-
-        function withCacheBust(url) {
-          var join = url.indexOf("?") > -1 ? "&" : "?";
-          return url + join + "t=" + Date.now();
-        }
-
-        function loadApp(bust) {
-          var url = bust ? withCacheBust(APP_URL) : APP_URL;
-          frame.src = url;
-          openBtn.href = APP_URL;
-          fallbackOpen.href = APP_URL;
-        }
-
-        reloadBtn.addEventListener("click", function () {
-          fallback.classList.remove("show");
-          loadApp(true);
-        });
-
-        // If the iframe stays blank (blocked), offer the fallback after a short wait.
-        var loaded = false;
-        frame.addEventListener("load", function () {
-          loaded = true;
-        });
-        loadApp(false);
-        setTimeout(function () {
-          try {
-            // Cross-origin frames often throw; treat as loaded if no hard failure.
-            if (!loaded && (!frame.contentWindow || !frame.src)) {
-              fallback.classList.add("show");
-            }
-          } catch (e) {
-            // Cross-origin access is expected once the app is running.
+        // Top-level navigation (iframe embeds of Apps Script usually fail).
+        var seconds = 2;
+        hint.textContent = "Opening the live app in " + seconds + "s…";
+        var timer = setInterval(function () {
+          seconds -= 1;
+          if (seconds <= 0) {
+            clearInterval(timer);
+            hint.textContent = "Redirecting…";
+            window.location.replace(APP_URL);
+            return;
           }
-        }, 8000);
+          hint.textContent = "Opening the live app in " + seconds + "s…";
+        }, 1000);
+
+        btn.addEventListener("click", function () {
+          clearInterval(timer);
+        });
       })();
     </script>
   </body>
