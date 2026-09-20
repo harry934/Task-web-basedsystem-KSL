@@ -1,58 +1,55 @@
 # Kenya Shipyards Limited Tasks Management System
 
-Web app for planning, assigning, tracking, reviewing work, and daily staff deployment at Kenya Shipyards Limited.
+Public entry is a **GitHub Pages** shell that embeds the live Apps Script web app.
 
-- **Frontend / backend:** Google Apps Script (kept **local**, not in this GitHub repo)
-- **Database:** Google Sheets (Africa/Nairobi)
-- **This repository:** documentation, branding assets, and deployment notes only
+- **GitHub Pages:** custom HTML wrapper (this repo)
+- **App runtime:** Google Apps Script + Sheets (source kept **local**, not on GitHub)
 
-**Live app (share this in email):**  
-https://script.google.com/a/*/macros/s/AKfycbzn34cAzmEzRipA4Y2omX8psx4O0OPEWpOoufIkMqK2Mp-bz7I2Tz-yicHosAoRj3f2Pw/exec
+## Live links
 
-Send that `/exec` web app link only. Do not send a Google Sheet, Drive file, Apps Script editor, `/dev`, or `usercontent.com` URL.
+| Use | URL |
+|---|---|
+| **Share this (GitHub Pages entry)** | Enable Pages on `main` / root, then use your `*.github.io/...` site URL |
+| **Direct Apps Script `/exec`** | https://script.google.com/a/*/macros/s/AKfycbwUz5HsPL4O76bxFe_HxCCWZamQ3-LkjXN7OtfWfQRGFHM5Fqn4TW0huPRZNMphVT7Hxw/exec?page=login |
+
+Do not share a Google Sheet, Drive file, Apps Script editor, `/dev`, or `usercontent.com` URL.
 
 ## What is on GitHub
 
 ```text
 .
-├── README.md                 This landing page
+├── index.html                Public embed page (GitHub Pages)
+├── README.md
 ├── .gitignore
-├── .clasp.json.example       Local clasp setup template (script ID not committed)
-├── assets/                   Branding (logo)
-└── docs/                     Guides, compliance notes, and specs
+├── .clasp.json.example       Local clasp setup only
+├── assets/ksl-logo.png
+└── docs/                     Guides and specs
 ```
 
-Apps Script sources (`src/*.gs`, `src/*.html`, `appsscript.json`) are **intentionally excluded** from GitHub. Deploy the running app with **clasp** from your local machine.
+`src/` (all `.gs` / Apps Script HTML) is gitignored and must not be pushed.
 
-## Documentation
+## Enable GitHub Pages
 
-| File | What it covers |
-|---|---|
-| [docs/FEATURES.md](docs/FEATURES.md) | Sign-in, roles, pages, Admin vs Staff |
-| [docs/PROMPT_COMPLIANCE_AUDIT.md](docs/PROMPT_COMPLIANCE_AUDIT.md) | Prompt-by-prompt build audit |
-| [docs/PROMPT_29_COPY_PASTE_CHECKLIST.md](docs/PROMPT_29_COPY_PASTE_CHECKLIST.md) | Manual test / deploy checklist |
+1. Repo **Settings → Pages**
+2. Source: **Deploy from a branch**
+3. Branch: `main` / folder: `/ (root)`
+4. Save, then open the published site URL
+
+The page loads the Apps Script app in an iframe and includes **Open in new tab** if a browser blocks the embed.
+
+## Update the embedded app URL
+
+Edit `APP_URL` in [`index.html`](index.html) when you create a new Apps Script deployment.
 
 ## Local Apps Script deploy (clasp)
 
-On a machine that has the private `src/` project folder:
+On a machine that has the private `src/` folder:
 
 ```bash
 cp .clasp.json.example .clasp.json
-# set scriptId in .clasp.json
+# set scriptId
 clasp push --force
-clasp version "Describe the change"
-clasp deploy -i YOUR_DEPLOYMENT_ID -V VERSION
 ```
-
-Then hard-refresh the `/exec` URL (`Ctrl+F5`).
-
-## First-time Apps Script setup
-
-1. Create or open the Google Sheet used as the database.
-2. Bind or point the script at that sheet (`DATABASE_SPREADSHEET_ID` in Script properties if needed).
-3. Push the local `src/` folder with clasp.
-4. In the Apps Script editor run `bootstrapMvpSlice1Database`, then create the first administrator.
-5. Deploy as a web app (username/password auth).
 
 ## Branding
 
